@@ -34,10 +34,12 @@ function loadImage(blob) {
   });
 }
 
-// Grayscale + contrast stretch at a size Tesseract likes. Returns a canvas.
-export async function preprocess(blob, maxSide = 2000) {
+// Grayscale + percentile contrast stretch at a size Tesseract likes. Returns a canvas.
+// Receipts are scaled so the longest side is about `target` px: small photos are upscaled,
+// large ones downscaled, since Tesseract wants text roughly 20-40 px tall.
+export async function preprocess(blob, target = 2200) {
   const img = await loadImage(blob);
-  const scale = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
+  const scale = target / Math.max(img.naturalWidth, img.naturalHeight);
   const w = Math.round(img.naturalWidth * scale);
   const h = Math.round(img.naturalHeight * scale);
   const canvas = document.createElement('canvas');
@@ -47,16 +49,21 @@ export async function preprocess(blob, maxSide = 2000) {
   const data = ctx.getImageData(0, 0, w, h);
   const px = data.data;
   const gray = new Uint8ClampedArray(w * h);
-  let lo = 255; let hi = 0;
+  const hist = new Uint32Array(256);
   for (let i = 0, j = 0; i < px.length; i += 4, j++) {
     const g = (px[i] * 299 + px[i + 1] * 587 + px[i + 2] * 114) / 1000;
     gray[j] = g;
-    if (g < lo) lo = g;
-    if (g > hi) hi = g;
+    hist[g | 0] += 1;
   }
+  // Stretch between the 2nd and 98th percentile so a few stray dark/bright pixels do not defeat it.
+  const n = w * h;
+  let lo = 0; let hi = 255; let acc = 0;
+  for (let v = 0; v < 256; v++) { acc += hist[v]; if (acc >= n * 0.02) { lo = v; break; } }
+  acc = 0;
+  for (let v = 255; v >= 0; v--) { acc += hist[v]; if (acc >= n * 0.02) { hi = v; break; } }
   const range = Math.max(1, hi - lo);
   for (let i = 0, j = 0; i < px.length; i += 4, j++) {
-    const v = ((gray[j] - lo) * 255) / range;
+    const v = Math.max(0, Math.min(255, ((gray[j] - lo) * 255) / range));
     px[i] = px[i + 1] = px[i + 2] = v;
   }
   ctx.putImageData(data, 0, 0);
@@ -67,7 +74,13 @@ export function ocrSupported() {
   return typeof WebAssembly === 'object' && typeof Worker === 'function';
 }
 
-// Returns { text, parsed }. onProgress receives 0..1 while recognising.
+function usefulness(parsed) {
+  return (parsed.total != null ? 2 : 0) + (parsed.date ? 1 : 0) + (parsed.merchant ? 1 : 0) + (parsed.tax != null ? 1 : 0);
+}
+
+// Returns { text, confidence, parsed, attempts }. onProgress receives { stage, progress }.
+// Tries single-column segmentation first; if little comes back, retries treating the
+// receipt as one uniform block, which copes better with skewed or curled paper.
 export async function readReceipt(blob, { dateFormat = 'DMY', onProgress } = {}) {
   progressHandler = (m) => {
     if (!onProgress) return;
@@ -75,7 +88,17 @@ export async function readReceipt(blob, { dateFormat = 'DMY', onProgress } = {})
     else if (/loading|initializ/i.test(m.status || '')) onProgress({ stage: 'loading', progress: m.progress });
   };
   const worker = await getWorker();
+  const { PSM } = (await import('../vendor/tesseract/tesseract.esm.min.js')).default;
   const canvas = await preprocess(blob);
-  const { data } = await worker.recognize(canvas);
-  return { text: data.text, parsed: parseReceiptText(data.text, { dateFormat }) };
+  const attempts = [];
+  for (const mode of [PSM.SINGLE_COLUMN, PSM.SINGLE_BLOCK]) {
+    await worker.setParameters({ tessedit_pageseg_mode: mode });
+    const { data } = await worker.recognize(canvas);
+    const parsed = parseReceiptText(data.text, { dateFormat });
+    attempts.push({ mode, text: data.text, confidence: data.confidence, parsed });
+    if (usefulness(parsed) >= 3) break;
+  }
+  attempts.sort((a, b) => usefulness(b.parsed) - usefulness(a.parsed) || b.confidence - a.confidence);
+  const best = attempts[0];
+  return { text: best.text, confidence: best.confidence, parsed: best.parsed, attempts: attempts.length };
 }

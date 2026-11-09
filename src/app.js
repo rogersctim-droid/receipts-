@@ -6,7 +6,7 @@ import {
 import { buildZip } from './zip.js';
 import { readReceipt, ocrSupported } from './ocr.js';
 
-export const APP_VERSION = '1.1.0';
+export const APP_VERSION = '1.1.1';
 
 const $ = (sel) => document.querySelector(sel);
 const state = {
@@ -270,8 +270,10 @@ async function runOcr(blob) {
   const token = ++state.ocrToken;
   const live = () => token === state.ocrToken && state.view === 'edit';
   setOcrStatus('Reading receipt…');
+  $('#ocr-debug').classList.add('hidden');
+  $('#ocr-text').textContent = '';
   try {
-    const { parsed } = await readReceipt(blob, {
+    const { parsed, text, confidence } = await readReceipt(blob, {
       dateFormat: state.settings.dateFormat,
       onProgress: ({ stage, progress }) => {
         if (!live()) return;
@@ -292,10 +294,17 @@ async function runOcr(blob) {
     if (parsed.merchant && untouched('#f-merchant')) { $('#f-merchant').value = parsed.merchant; $('#f-merchant').classList.add('suggested'); found.push('merchant'); }
     if (parsed.date && untouched('#f-date')) { $('#f-date').value = parsed.date; $('#f-date').classList.add('suggested'); found.push('date'); }
     if (parsed.category && untouched('#f-category')) { $('#f-category').value = parsed.category; $('#f-category').classList.add('suggested'); found.push('category'); }
+    const words = (text || '').trim().split(/\s+/).filter(Boolean).length;
+    $('#ocr-text').textContent = `${Math.round(confidence || 0)}% confidence, ${words} words\n\n${(text || '').trim() || '(no text found)'}`;
+    $('#ocr-debug').classList.remove('hidden');
     if (found.length) setOcrStatus(`Read from photo: ${found.join(', ')}. Please check against the receipt.`, 'ok');
-    else setOcrStatus('Could not read this receipt. Please enter the details.', 'warn');
+    else if (words < 5) setOcrStatus('Could not make out any text. Try again with the receipt flat, filling the frame, in good light.', 'warn');
+    else setOcrStatus('Read the text but could not find a total or date in it. Please enter the details.', 'warn');
   } catch (err) {
-    if (live()) setOcrStatus(`Receipt reader unavailable: ${err.message}`, 'warn');
+    if (!live()) return;
+    setOcrStatus(`Receipt reader failed: ${err && err.message ? err.message : err}`, 'warn');
+    $('#ocr-text').textContent = String(err && err.stack ? err.stack : err);
+    $('#ocr-debug').classList.remove('hidden');
   }
 }
 function recomputeTax() {
@@ -625,6 +634,9 @@ function bind() {
   $('#btn-delete').addEventListener('click', deleteCurrent);
   $('#f-total').addEventListener('input', recomputeTax);
   OCR_FIELDS.forEach((sel) => $(sel).addEventListener('input', () => $(sel).classList.remove('suggested')));
+  $('#btn-ocr-copy').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText($('#ocr-text').textContent); toast('Copied'); } catch { toast('Could not copy. Long-press the text to select it.'); }
+  });
   $('#btn-ocr').addEventListener('click', async () => {
     // Re-read: treat whatever is in the form now as the baseline, so every field may be replaced.
     const blob = await currentImageBlob();

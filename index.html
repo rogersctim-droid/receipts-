@@ -64,6 +64,11 @@
           <input id="file-replace" type="file" accept="image/*" capture="environment" hidden />
           <button type="button" id="btn-ocr" class="chip-btn hidden">Read details from photo</button>
           <div id="ocr-status" class="status-line hidden"></div>
+          <details id="ocr-debug" class="ocr-debug hidden">
+            <summary>Show what was read from the photo</summary>
+            <pre id="ocr-text"></pre>
+            <button type="button" id="btn-ocr-copy" class="chip-btn">Copy text</button>
+          </details>
         </div>
 
         <label>Total (incl. tax)
