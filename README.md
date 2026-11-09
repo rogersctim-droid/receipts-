@@ -24,8 +24,8 @@ no account, no server, no subscription.
 
 1. Open the live URL in Safari (iPhone) or Chrome (Android).
 2. iPhone: Share button › **Add to Home Screen**. Android: menu › **Install app** / **Add to Home screen**.
-3. Open it from the home screen. Go to **Settings**, pick your region (sets the Xero tax names,
-   currency and date format), enter your name and your Xero bills email address, and save.
+3. Open it from the home screen. The app is set up for Australia (AUD, 10% GST, Xero's
+   GST on Expenses / GST on Income tax rates). Change the region in **Settings** if needed, enter your name and your Xero bills email address, and save.
 
 ### Finding your Xero bills email address
 
@@ -43,12 +43,13 @@ share sheet. Choose Mail and paste the address.
 - **Sales invoice CSV**: creates draft invoices, one per client, dated today, due in the number of
   days set in Settings. Each line reads `03/11/2026 - Taxi / rideshare - Uber - Airport run`.
   Review before approving.
-- **Tax type names** must match your Xero organisation exactly. The defaults are the standard
-  names for UK, Australia, New Zealand and US organisations. Change them in Settings if yours differ.
+- **Tax type names** must match your Xero organisation exactly. The defaults are Xero's standard
+  Australian names (GST on Expenses, GST Free Expenses, BAS Excluded, GST on Income). UK, NZ and
+  US presets are also available. Change them in Settings if yours differ.
 - **Account codes** default to Xero's standard chart (493 Travel, 420 Entertainment, 429 General
   Expenses, 453 Office Expenses, 200 Sales). Edit them in Settings to match your chart.
 - **Tax on recharged expenses**: by default the recharge line carries your standard income tax
-  rate on the gross receipt amount. If you treat these as disbursements, switch to
+  rate (GST) on the gross receipt amount. If you treat these as disbursements, switch to
   **No tax** in Settings. Check the treatment with your accountant.
 
 ## Backups

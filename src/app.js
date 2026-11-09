@@ -477,7 +477,7 @@ async function saveSettings(e) {
   state.settings = {
     ...state.settings,
     region: $('#s-region').value,
-    currency: $('#s-currency').value.trim().toUpperCase() || 'GBP',
+    currency: $('#s-currency').value.trim().toUpperCase() || 'AUD',
     taxRate: Number($('#s-taxrate').value) || 0,
     dateFormat: $('#s-datefmt').value,
     accountCodes,

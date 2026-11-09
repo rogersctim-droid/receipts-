@@ -1,15 +1,15 @@
 // Pure data/export helpers. No DOM access so this file can be unit-tested in Node.
 
 export const REGIONS = {
-  UK: {
-    label: 'United Kingdom (VAT)', currency: 'GBP', rate: 20, dateFormat: 'DMY',
-    taxExpense: '20% (VAT on Expenses)', taxExpenseZero: 'Zero Rated Expenses', taxExpenseNone: 'No VAT',
-    taxIncome: '20% (VAT on Income)', taxIncomeZero: 'Zero Rated Income',
-  },
   AU: {
     label: 'Australia (GST)', currency: 'AUD', rate: 10, dateFormat: 'DMY',
     taxExpense: 'GST on Expenses', taxExpenseZero: 'GST Free Expenses', taxExpenseNone: 'BAS Excluded',
     taxIncome: 'GST on Income', taxIncomeZero: 'GST Free Income',
+  },
+  UK: {
+    label: 'United Kingdom (VAT)', currency: 'GBP', rate: 20, dateFormat: 'DMY',
+    taxExpense: '20% (VAT on Expenses)', taxExpenseZero: 'Zero Rated Expenses', taxExpenseNone: 'No VAT',
+    taxIncome: '20% (VAT on Income)', taxIncomeZero: 'Zero Rated Income',
   },
   NZ: {
     label: 'New Zealand (GST)', currency: 'NZD', rate: 15, dateFormat: 'DMY',
@@ -39,8 +39,8 @@ export const PAY_METHODS = {
   company: 'Company card',
 };
 
-export function defaultSettings(region = 'UK') {
-  const r = REGIONS[region] || REGIONS.UK;
+export function defaultSettings(region = 'AU') {
+  const r = REGIONS[region] || REGIONS.AU;
   return {
     region,
     currency: r.currency,
