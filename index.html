@@ -188,8 +188,9 @@
         <label>Income account for recharged expenses <input id="s-income" type="text" /></label>
         <label>Tax on recharged expenses
           <select id="s-rechargetax">
-            <option value="standard">Standard rate on the gross amount</option>
-            <option value="none">No tax (treat as disbursement)</option>
+            <option value="standard">Gross receipt amount + GST (client pays more than you did)</option>
+            <option value="net">Net amount + GST (client pays exactly what you did)</option>
+            <option value="none">Gross amount, no GST (reimbursement as agent only)</option>
           </select>
         </label>
         <div class="row">

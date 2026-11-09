@@ -52,7 +52,7 @@ export function defaultSettings(region = 'AU') {
     },
     accountCodes: Object.fromEntries(CATEGORIES.map((c) => [c.key, c.account])),
     incomeAccount: '200',
-    rechargeTax: 'standard', // 'standard' | 'none'
+    rechargeTax: 'standard', // 'standard' (gross + tax) | 'net' (net + tax) | 'none' (gross, no tax)
     dueDays: 30,
     xeroEmail: '',
     yourName: '',
@@ -194,6 +194,8 @@ export function invoiceRows(receipts, settings, opts = {}) {
     const invoiceNumber = `${prefix}-${invoiceDate.replace(/-/g, '')}-${String(n).padStart(2, '0')}`;
     const taxType = settings.rechargeTax === 'none' ? settings.taxNames.incomeZero : settings.taxNames.income;
     for (const r of list) {
+      const tax = r.noTax ? 0 : Number(r.tax) || 0;
+      const amount = settings.rechargeTax === 'net' ? (Number(r.total) || 0) - tax : r.total;
       rows.push([
         client, '', '', '', '', '', '', '', '', '',
         invoiceNumber,
@@ -203,7 +205,7 @@ export function invoiceRows(receipts, settings, opts = {}) {
         '',
         `${formatXeroDate(r.date, settings.dateFormat)} - ${describe(r)}`,
         '1',
-        money(r.total),
+        money(amount),
         '',
         settings.incomeAccount || '200',
         taxType,

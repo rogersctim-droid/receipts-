@@ -48,9 +48,11 @@ share sheet. Choose Mail and paste the address.
   US presets are also available. Change them in Settings if yours differ.
 - **Account codes** default to Xero's standard chart (493 Travel, 420 Entertainment, 429 General
   Expenses, 453 Office Expenses, 200 Sales). Edit them in Settings to match your chart.
-- **Tax on recharged expenses**: by default the recharge line carries your standard income tax
-  rate (GST) on the gross receipt amount. If you treat these as disbursements, switch to
-  **No tax** in Settings. Check the treatment with your accountant.
+- **Tax on recharged expenses** (Settings) has three options. *Gross + GST* (default): a $44 taxi
+  is invoiced at $44 plus $4.40 GST. *Net + GST*: invoiced at $40 plus $4 GST, so the client pays
+  exactly what the taxi cost you and you keep the $4 input tax credit. *Gross, no GST*: only for
+  true reimbursements where you paid as the client's agent. Check the treatment with your
+  accountant and your client contracts.
 
 ## Backups
 

@@ -78,6 +78,15 @@ test('recharge without tax uses zero-rated income type', () => {
   assert.equal(row[INVOICE_HEADER.indexOf('*TaxType')], 'Zero Rated Income');
 });
 
+test('recharge net plus tax bills the receipt net amount', () => {
+  const s = { ...settings, rechargeTax: 'net' };
+  const [row] = invoiceRows([taxi], s, { invoiceDate: '2026-11-09' });
+  assert.equal(row[INVOICE_HEADER.indexOf('*UnitAmount')], '20.00');
+  assert.equal(row[INVOICE_HEADER.indexOf('*TaxType')], '20% (VAT on Income)');
+  const [noTaxRow] = invoiceRows([{ ...lunch, billable: true }], s, { invoiceDate: '2026-11-09' });
+  assert.equal(noTaxRow[INVOICE_HEADER.indexOf('*UnitAmount')], '12.50', 'no-tax receipt is recharged in full');
+});
+
 test('claim rows split net and tax', () => {
   const [row] = claimRows([taxi], settings);
   assert.equal(row[5], '20.00');
