@@ -122,6 +122,27 @@ test('date formats', () => {
   assert.equal(findDate(['no date here'], { now }), null);
 });
 
+test('sums itemised lines when the total line was not read', () => {
+  const p = parseReceiptText(`Bowlito
+1100321364 Burrito - Beef Brisket
+1.00 x 16.90 16.90 (10)
+1000003178 Mt Franklin Lightly Spark
+1.00 x 6.20 6.20 (10)
+Item(s) : 2`, { now });
+  assert.equal(p.total, 23.1);
+  assert.equal(p.totalSource, 'items');
+});
+
+test('total from a Gross column header when the TOTAL line was missed', () => {
+  const p = parseReceiptText(`Bowlito
+1.00 x 16.90 16.90 (10)
+1.00 x 6.20 6.20 (10)
+GST Tax Net Gst Gross
+10 10.00% 21.00 2.10 23.10`, { now });
+  assert.equal(p.total, 23.1);
+  assert.equal(p.tax, 2.1);
+});
+
 test('merchant: rejects logo garbage, uses thank-you footer', () => {
   const p = parseReceiptText(`i IO
 ABN: 64640167515

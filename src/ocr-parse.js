@@ -66,7 +66,7 @@ export function amountsIn(line) {
   return out;
 }
 
-const TOTAL_WORDS = /\b(grand\s*total|total\s*(due|amount|paid|payable|incl|inc)?|amount\s*(due|paid|payable|tendered)|balance\s*due|to\s*pay|net\s*payable)\b/i;
+const TOTAL_WORDS = /\b(grand\s*total|total\s*(due|amount|paid|payable|incl|inc)?|amount\s*(due|paid|payable|tendered)|balance\s*due|to\s*pay|net\s*payable|gross)\b/i;
 const NOT_TOTAL = /sub\s*-?\s*total|total\s*(savings?|discount|items?|qty|quantity|units?)|\bgst\b|\btax\b|\bchange\b|\brounding\b|\bpoints\b/i;
 const CARD_WORDS = /\b(eftpos|visa|mastercard|amex|debit|credit|card|paywave|tap|contactless|purchase)\b/i;
 
@@ -74,8 +74,12 @@ export function findTotal(lines) {
   const totalLines = [];
   const cardLines = [];
   let max = 0;
-  for (const line of lines) {
-    const amounts = amountsIn(line);
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    let amounts = amountsIn(line);
+    // A header row such as "GST  Net  Gross" has its numbers on the following line.
+    const headerTotal = !amounts.length && TOTAL_WORDS.test(line) && lines[i + 1] ? amountsIn(lines[i + 1]) : [];
+    if (headerTotal.length) { totalLines.push(headerTotal[headerTotal.length - 1]); continue; }
     if (!amounts.length) continue;
     max = Math.max(max, ...amounts);
     if (TOTAL_WORDS.test(line) && !NOT_TOTAL.test(line)) totalLines.push(amounts[amounts.length - 1]);
@@ -83,6 +87,16 @@ export function findTotal(lines) {
   }
   if (totalLines.length) return { value: Math.max(...totalLines), source: 'total' };
   if (cardLines.length) return { value: Math.max(...cardLines), source: 'card' };
+  // No total line read (often the bottom of the receipt). If there are itemised
+  // "qty x price amount" lines, their sum is a better guess than the largest number.
+  const itemAmounts = lines
+    .map((l) => l.match(/^\s*\d+(?:\.\d+)?\s*[xX×@]\s*\$?[\d.,]+\s+\$?(\d[\d,]*\.\d{2})\b/))
+    .filter(Boolean)
+    .map((m) => Number(m[1].replace(/,/g, '')));
+  if (itemAmounts.length >= 2) {
+    const sum = Math.round(itemAmounts.reduce((a, b) => a + b, 0) * 100) / 100;
+    if (sum >= max) return { value: sum, source: 'items' };
+  }
   if (max > 0) return { value: max, source: 'largest' };
   return null;
 }

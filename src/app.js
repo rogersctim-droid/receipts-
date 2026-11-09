@@ -6,7 +6,7 @@ import {
 import { buildZip } from './zip.js';
 import { readReceipt, ocrSupported, preloadOcr } from './ocr.js';
 
-export const APP_VERSION = '1.2.0';
+export const APP_VERSION = '1.2.1';
 
 const $ = (sel) => document.querySelector(sel);
 const state = {
@@ -785,9 +785,11 @@ function bind() {
     try { await navigator.clipboard.writeText($('#ocr-text').textContent); toast('Copied'); } catch { toast('Could not copy. Long-press the text to select it.'); }
   });
   $('#btn-ocr').addEventListener('click', async () => {
-    // Re-read: treat whatever is in the form now as the baseline, so every field may be replaced.
+    // Re-read: clear everything that came from the photo so the result reflects only this read.
     const blob = await currentImageBlob();
     if (!blob) return;
+    OCR_FIELDS.forEach((sel) => { if ($(sel).classList.contains('suggested')) $(sel).value = sel === '#f-category' ? (state.settings.lastCategory || 'meals') : sel === '#f-date' ? todayIso() : ''; });
+    clearSuggested();
     state.initialValues = snapshotFields();
     state.taxTouched = false;
     runOcr(blob);
