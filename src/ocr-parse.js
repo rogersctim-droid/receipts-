@@ -30,6 +30,7 @@ const CATEGORY_KEYWORDS = {
   meals: [
     [/\bcaf[eé]\b|restaurant|\bbistro\b|\bkitchen\b|\bbakery\b|\bpizza|\bburger|\bsushi\b|\bthai\b|\bgrill\b|\bpub\b|\btavern\b|\bbrasserie\b|\beatery\b|\bdiner\b/i, 3],
     [/\bcoffee\b|\blatte\b|flat\s*white|cappuccino|\bespresso\b|\bchai\b|\bbreakfast\b|\blunch\b|\bdinner\b|\bmeal\b|\bcovers?\b|\btable\s*\d|\bdine\s*in|take\s*away/i, 2],
+    [/\bburrito|\btacos?\b|\bsandwich|\bsalad|\bwrap\b|\bbowl\b|\bnoodle|\bcurry|\bchicken|\bbeef\b|\bbrisket|\bfries\b|\bchips\b|\bjuice\b|\bsmoothie|\bwater\b|\bsparkling|\bmuffin|\bcroissant|\btoast/i, 2],
     [/mcdonald|hungry\s*jack|\bkfc\b|\bsubway\b|guzman|zambrero|starbucks|gloria\s*jean|nando|grill'?d|\bwine\b|\bbeer\b|\bschooner\b/i, 3],
   ],
   supplies: [[/officeworks|stationery|\btoner\b|\bink\b|cartridge|\bpaper\b|\bpens?\b|\bnotebook\b|jb\s*hi-?fi|harvey\s*norman|\bbunnings\b/i, 3]],
@@ -88,9 +89,13 @@ export function findTotal(lines) {
 
 export function findTax(lines, total) {
   const candidates = [];
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     if (!/\bgst\b|\btax\b|\bvat\b/i.test(line) || /tax\s*invoice|\babn\b|tax\s*code|gst\s*(reg|no|number)/i.test(line)) continue;
-    for (const a of amountsIn(line)) {
+    let amounts = amountsIn(line);
+    // Column headers like "GST  Net  Gross" put the numbers on the next line.
+    if (!amounts.length && lines[i + 1]) amounts = amountsIn(lines[i + 1]);
+    for (const a of amounts) {
       if (!total || a < total) candidates.push(a);
     }
   }

@@ -75,6 +75,35 @@ test('hotel invoice with month names', () => {
   assert.equal(p.merchant, 'Quest Apartment Hotels');
 });
 
+test('airport burrito receipt with GST in a column table', () => {
+  const text = `Bowlito
+ABN: 64640167515
+Sunshine Coast Airport
+Ph: 07 5406 2962
+e: hello@lagardereawpl.com
+Tax Invoice #:2048
+Date : 09/11/2026 - 11:38:46
+Shop : MCY104 - 002
+Staff : 17246 - Zachary
+1100321364 Burrito - Beef Brisket
+1.00 x 16.90 16.90 (10)
+1000003178 Mt Franklin Lightly Spark
+1.00 x 6.20 6.20 (10)
+Item(s) : 2
+TOTAL 23.10
+VISA 23.10
+GST Tax Net Gst Gross
+10 10.00% 21.00 2.10 23.10
+Thank You For Shopping at
+Bowlito, Sunshine Coast`;
+  const p = parseReceiptText(text, { now });
+  assert.equal(p.merchant, 'Bowlito');
+  assert.equal(p.total, 23.1);
+  assert.equal(p.tax, 2.1);
+  assert.equal(p.date, '2026-11-09');
+  assert.equal(p.category, 'meals');
+});
+
 test('falls back to the largest amount when no total word is present', () => {
   const p = parseReceiptText('Parking\n2 hours 8.00\nFee 12.00\n', { now });
   assert.equal(p.total, 12);

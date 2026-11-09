@@ -4,9 +4,9 @@ import {
   billsCsv, invoiceCsv, claimCsv, summarize, filterReceipts, formatXeroDate, round2,
 } from './export.js';
 import { buildZip } from './zip.js';
-import { readReceipt, ocrSupported } from './ocr.js';
+import { readReceipt, ocrSupported, preloadOcr } from './ocr.js';
 
-export const APP_VERSION = '1.1.1';
+export const APP_VERSION = '1.1.2';
 
 const $ = (sel) => document.querySelector(sel);
 const state = {
@@ -269,17 +269,28 @@ async function runOcr(blob) {
   if (!blob || !ocrSupported()) return;
   const token = ++state.ocrToken;
   const live = () => token === state.ocrToken && state.view === 'edit';
-  setOcrStatus('Reading receipt…');
+  const started = Date.now();
+  let stageText = 'Starting receipt reader…';
+  const tick = () => {
+    if (!live()) return;
+    const secs = Math.round((Date.now() - started) / 1000);
+    setOcrStatus(secs >= 4 ? `${stageText} (${secs}s)` : stageText);
+  };
+  tick();
+  const timer = setInterval(tick, 1000);
   $('#ocr-debug').classList.add('hidden');
   $('#ocr-text').textContent = '';
   try {
     const { parsed, text, confidence } = await readReceipt(blob, {
       dateFormat: state.settings.dateFormat,
-      onProgress: ({ stage, progress }) => {
-        if (!live()) return;
-        setOcrStatus(stage === 'loading' ? 'Preparing receipt reader (first time only)…' : `Reading receipt… ${Math.round((progress || 0) * 100)}%`);
+      onProgress: ({ stage, progress, detail }) => {
+        if (stage === 'loading') stageText = `Downloading receipt reader, first time only: ${detail || 'please wait'}…`;
+        else if (stage === 'preparing') stageText = 'Preparing receipt reader…';
+        else stageText = `Reading receipt… ${Math.round((progress || 0) * 100)}%`;
+        tick();
       },
     });
+    clearInterval(timer);
     if (!live()) return;
     const init = state.initialValues || {};
     const untouched = (sel) => $(sel).value === (init[sel] ?? '');
@@ -301,6 +312,7 @@ async function runOcr(blob) {
     else if (words < 5) setOcrStatus('Could not make out any text. Try again with the receipt flat, filling the frame, in good light.', 'warn');
     else setOcrStatus('Read the text but could not find a total or date in it. Please enter the details.', 'warn');
   } catch (err) {
+    clearInterval(timer);
     if (!live()) return;
     setOcrStatus(`Receipt reader failed: ${err && err.message ? err.message : err}`, 'warn');
     $('#ocr-text').textContent = String(err && err.stack ? err.stack : err);
@@ -681,6 +693,7 @@ async function init() {
     navigator.serviceWorker.register('./sw.js').catch(() => { /* offline support is optional */ });
   }
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+  if (state.settings.ocr !== false) setTimeout(preloadOcr, 2500);
 }
 
 init().catch((err) => {
