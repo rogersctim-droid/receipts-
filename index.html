@@ -15,9 +15,19 @@
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
+  <svg hidden style="display:none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></symbol>
+    <symbol id="i-gallery" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="M21 16l-5-5-9 9"/></symbol>
+    <symbol id="i-receipts" viewBox="0 0 24 24"><path d="M6 3h12v18l-2-1.5L14 21l-2-1.5L10 21l-2-1.5L6 21z"/><path d="M9 8h6M9 12h6M9 16h4"/></symbol>
+    <symbol id="i-export" viewBox="0 0 24 24"><path d="M12 15V4m0 0L8 8m4-4l4 4"/><path d="M4 14v5a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-5"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  </svg>
+
   <header class="topbar">
-    <h1 id="view-title">Receipts</h1>
     <button id="btn-back" class="icon-btn hidden" type="button" aria-label="Back">&#8592;</button>
+    <h1 id="view-title">Receipts</h1>
   </header>
 
   <main id="app">
@@ -26,16 +36,19 @@
     <section id="view-capture" class="view">
       <div class="capture-actions">
         <label class="big-btn primary" for="file-camera">
-          <span class="big-icon">&#128247;</span>
+          <svg class="ico"><use href="#i-camera"/></svg>
           <span>Take photo of receipt</span>
         </label>
         <input id="file-camera" type="file" accept="image/*" capture="environment" hidden />
         <label class="big-btn" for="file-gallery">
-          <span class="big-icon">&#128444;</span>
+          <svg class="ico"><use href="#i-gallery"/></svg>
           <span>Choose from photos</span>
         </label>
         <input id="file-gallery" type="file" accept="image/*" hidden />
-        <button id="btn-no-photo" class="big-btn subtle" type="button">Add receipt without a photo</button>
+        <button id="btn-no-photo" class="big-btn subtle" type="button">
+          <svg class="ico"><use href="#i-plus"/></svg>
+          <span>Add receipt without a photo</span>
+        </button>
       </div>
 
       <div class="cards">
@@ -58,26 +71,33 @@
     <section id="view-edit" class="view hidden">
       <form id="edit-form" autocomplete="off">
         <div class="img-wrap">
-          <img id="edit-image" alt="Receipt" class="hidden" />
+          <button type="button" id="btn-view-photo" class="photo-btn hidden" aria-label="View photo full screen">
+            <img id="edit-image" alt="Receipt" />
+            <span class="zoom-hint">Tap to zoom</span>
+          </button>
           <div id="edit-noimage" class="noimage">No photo</div>
-          <label class="chip-btn" for="file-replace">Change photo</label>
-          <input id="file-replace" type="file" accept="image/*" capture="environment" hidden />
-          <button type="button" id="btn-ocr" class="chip-btn hidden">Read details from photo</button>
-          <div id="ocr-status" class="status-line hidden"></div>
-          <details id="ocr-debug" class="ocr-debug hidden">
-            <summary>Show what was read from the photo</summary>
-            <pre id="ocr-text"></pre>
-            <button type="button" id="btn-ocr-copy" class="chip-btn">Copy text</button>
-          </details>
         </div>
+        <div id="ocr-status" class="status-line hidden"></div>
 
-        <label>Total (incl. tax)
+        <label>Total (incl. GST)
           <input id="f-total" type="number" inputmode="decimal" step="0.01" min="0" required placeholder="0.00" />
         </label>
         <label>Merchant
           <input id="f-merchant" type="text" placeholder="e.g. Uber, Coles, Qantas" list="merchant-list" required />
           <datalist id="merchant-list"></datalist>
         </label>
+
+        <div class="tools-row">
+          <label class="chip-btn" for="file-replace">Change photo</label>
+          <input id="file-replace" type="file" accept="image/*" capture="environment" hidden />
+          <button type="button" id="btn-ocr" class="chip-btn hidden">Read photo again</button>
+        </div>
+        <details id="ocr-debug" class="ocr-debug hidden">
+          <summary>Show what was read from the photo</summary>
+          <pre id="ocr-text"></pre>
+          <button type="button" id="btn-ocr-copy" class="chip-btn">Copy text</button>
+        </details>
+
         <div class="row">
           <label>Date
             <input id="f-date" type="date" required />
@@ -86,12 +106,10 @@
             <select id="f-category"></select>
           </label>
         </div>
-        <div class="row">
-          <label>Tax amount
-            <input id="f-tax" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00" />
-          </label>
-          <label class="check"><input id="f-notax" type="checkbox" /> No tax on this receipt</label>
-        </div>
+        <label>GST amount
+          <input id="f-tax" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00" />
+        </label>
+        <label class="check"><input id="f-notax" type="checkbox" /> No GST on this receipt</label>
         <label>Paid with
           <select id="f-paid">
             <option value="personal">Personal card / cash (reimburse me)</option>
@@ -104,14 +122,14 @@
           <datalist id="client-list"></datalist>
         </label>
         <label>Notes
-          <input id="f-notes" type="text" placeholder="e.g. Trip to London office, dinner with X" />
+          <input id="f-notes" type="text" placeholder="e.g. Trip to Sydney office, lunch with X" />
         </label>
 
         <div class="status-line" id="edit-status"></div>
 
-        <div class="form-actions">
-          <button type="submit" class="btn primary">Save</button>
+        <div class="action-bar">
           <button type="button" id="btn-delete" class="btn danger hidden">Delete</button>
+          <button type="submit" class="btn primary">Save receipt</button>
         </div>
       </form>
     </section>
@@ -151,21 +169,29 @@
       </div>
       <div class="summary" id="export-summary"></div>
 
+      <div id="export-followup" class="followup hidden">
+        <div id="export-followup-text"></div>
+        <div class="followup-actions">
+          <button type="button" class="btn primary small" id="btn-followup-mark">Mark as done</button>
+          <button type="button" class="btn small" id="btn-followup-dismiss">Not now</button>
+        </div>
+      </div>
+
       <h2>Into Xero</h2>
       <div class="export-group">
-        <button class="btn" id="x-bills" type="button">Download bills CSV<small>Business › Bills to pay › Import</small></button>
-        <button class="btn" id="x-images" type="button">Download receipt images (ZIP)<small>Attach to bills, or keep as records</small></button>
-        <button class="btn" id="x-share" type="button">Share photos to Xero bills inbox<small>Opens your mail app; Xero reads the receipt</small></button>
+        <button class="btn" id="x-bills" type="button">Bills CSV<small>Xero › Business › Bills to pay › Import</small></button>
+        <button class="btn" id="x-images" type="button">Receipt photos (ZIP)<small>Attach to bills, or keep as records</small></button>
+        <button class="btn" id="x-share" type="button">Send photos to Xero bills inbox<small>Opens the share sheet; Xero reads the receipts</small></button>
       </div>
 
       <h2>For invoicing clients</h2>
       <div class="export-group">
-        <button class="btn" id="x-invoice" type="button">Download sales invoice CSV<small>Business › Invoices › Import. One invoice per client</small></button>
+        <button class="btn" id="x-invoice" type="button">Sales invoice CSV<small>Xero › Business › Invoices › Import. One invoice per client</small></button>
         <button class="btn" id="x-claim-pdf" type="button">Expense claim PDF with photos<small>Attach to your invoice or claim</small></button>
-        <button class="btn" id="x-claim-csv" type="button">Expense list spreadsheet (CSV)<small>Date, merchant, net, tax, total per line</small></button>
+        <button class="btn" id="x-claim-csv" type="button">Expense list (CSV)<small>Date, merchant, net, GST, total per line</small></button>
       </div>
 
-      <h2>After exporting</h2>
+      <h2>Mark manually</h2>
       <div class="export-group">
         <button class="btn subtle" id="x-mark-xero" type="button">Mark selected as “in Xero”</button>
         <button class="btn subtle" id="x-mark-claim" type="button">Mark selected as “claimed”</button>
@@ -175,6 +201,14 @@
     <!-- Settings -->
     <section id="view-settings" class="view hidden">
       <form id="settings-form" autocomplete="off">
+        <h2>You</h2>
+        <label>Your name (shown on expense claims) <input id="s-name" type="text" /></label>
+        <label>Default client <input id="s-client" type="text" /></label>
+        <label>Xero bills email address
+          <input id="s-xeroemail" type="email" placeholder="yourorg-xxxx@xerofiles.com" />
+          <small class="muted">In Xero: Business › Bills to pay › “Email bills to Xero” (or Files › Inbox).</small>
+        </label>
+
         <h2>Region & tax</h2>
         <label>Region (sets Xero tax names)
           <select id="s-region"></select>
@@ -183,47 +217,48 @@
           <label>Currency <input id="s-currency" type="text" maxlength="3" /></label>
           <label>Tax rate % <input id="s-taxrate" type="number" step="0.01" min="0" /></label>
         </div>
-        <label>Date format in CSVs
-          <select id="s-datefmt">
-            <option value="DMY">DD/MM/YYYY</option>
-            <option value="MDY">MM/DD/YYYY</option>
-          </select>
-        </label>
-
-        <h2>Xero account codes</h2>
-        <div id="s-accounts"></div>
-        <label>Income account for recharged expenses <input id="s-income" type="text" /></label>
-        <label>Tax on recharged expenses
-          <select id="s-rechargetax">
-            <option value="standard">Gross receipt amount + GST (client pays more than you did)</option>
-            <option value="net">Net amount + GST (client pays exactly what you did)</option>
-            <option value="none">Gross amount, no GST (reimbursement as agent only)</option>
-          </select>
-        </label>
-        <div class="row">
-          <label>Invoice prefix <input id="s-prefix" type="text" /></label>
-          <label>Due in days <input id="s-due" type="number" min="0" /></label>
-        </div>
-
-        <h2>Xero tax type names</h2>
-        <p class="muted">Must match the tax rate names in your Xero organisation exactly.</p>
-        <label>Expense, standard <input id="s-tax-exp" type="text" /></label>
-        <label>Expense, zero-rated <input id="s-tax-exp0" type="text" /></label>
-        <label>Expense, no tax <input id="s-tax-expn" type="text" /></label>
-        <label>Income, standard <input id="s-tax-inc" type="text" /></label>
-        <label>Income, zero-rated <input id="s-tax-inc0" type="text" /></label>
 
         <h2>Reading receipts</h2>
-        <label class="check"><input id="s-ocr" type="checkbox" /> Read total, date, merchant and GST from photos automatically</label>
-        <p class="muted small">Runs entirely on your phone; nothing is uploaded. The first use downloads about 7 MB of recognition data, which is then kept for offline use. Always check the suggested values against the receipt.</p>
+        <label class="check"><input id="s-ocr" type="checkbox" /> Read total, date, merchant and GST from photos</label>
+        <label class="check"><input id="s-ocrtext" type="checkbox" /> Always show the text read from each photo</label>
+        <p class="muted small">Runs entirely on your phone; nothing is uploaded. The text panel appears automatically when a receipt cannot be read.</p>
 
-        <h2>You</h2>
-        <label>Your name (shown on expense claims) <input id="s-name" type="text" /></label>
-        <label>Default client <input id="s-client" type="text" /></label>
-        <label>Xero bills email address
-          <input id="s-xeroemail" type="email" placeholder="yourorg-xxxx@xerofiles.com" />
-          <small class="muted">Find it in Xero: Business › Bills to pay › the “Email bills to Xero” link (or Files › Inbox).</small>
-        </label>
+        <details class="advanced">
+          <summary><h2>Invoicing clients</h2></summary>
+          <label>Income account for recharged expenses <input id="s-income" type="text" /></label>
+          <label>GST on recharged expenses
+            <select id="s-rechargetax">
+              <option value="standard">Gross receipt amount + GST (client pays more than you did)</option>
+              <option value="net">Net amount + GST (client pays exactly what you did)</option>
+              <option value="none">Gross amount, no GST (reimbursement as agent only)</option>
+            </select>
+          </label>
+          <div class="row">
+            <label>Invoice prefix <input id="s-prefix" type="text" /></label>
+            <label>Due in days <input id="s-due" type="number" min="0" /></label>
+          </div>
+        </details>
+
+        <details class="advanced">
+          <summary><h2>Xero account codes</h2></summary>
+          <div id="s-accounts"></div>
+        </details>
+
+        <details class="advanced">
+          <summary><h2>Xero tax type names</h2></summary>
+          <p class="muted">Must match the tax rate names in your Xero organisation exactly.</p>
+          <label>Date format in CSVs
+            <select id="s-datefmt">
+              <option value="DMY">DD/MM/YYYY</option>
+              <option value="MDY">MM/DD/YYYY</option>
+            </select>
+          </label>
+          <label>Expense, standard <input id="s-tax-exp" type="text" /></label>
+          <label>Expense, zero-rated <input id="s-tax-exp0" type="text" /></label>
+          <label>Expense, no tax <input id="s-tax-expn" type="text" /></label>
+          <label>Income, standard <input id="s-tax-inc" type="text" /></label>
+          <label>Income, zero-rated <input id="s-tax-inc0" type="text" /></label>
+        </details>
 
         <div class="form-actions">
           <button type="submit" class="btn primary">Save settings</button>
@@ -232,7 +267,7 @@
         <h2>Backup</h2>
         <p class="muted">Everything is stored on this phone only. Back up regularly, and restore on a new phone.</p>
         <div class="export-group">
-          <button type="button" class="btn" id="s-backup">Download full backup (JSON)</button>
+          <button type="button" class="btn" id="s-backup">Full backup (JSON)</button>
           <label class="btn" for="s-restore-file">Restore from backup</label>
           <input id="s-restore-file" type="file" accept="application/json,.json" hidden />
           <button type="button" class="btn danger" id="s-wipe">Delete all receipts</button>
@@ -243,13 +278,19 @@
   </main>
 
   <nav class="tabbar">
-    <button data-view="capture" class="tab active" type="button"><span>&#128247;</span>Capture</button>
-    <button data-view="list" class="tab" type="button"><span>&#128203;</span>Receipts</button>
-    <button data-view="export" class="tab" type="button"><span>&#128228;</span>Export</button>
-    <button data-view="settings" class="tab" type="button"><span>&#9881;</span>Settings</button>
+    <button data-view="capture" class="tab active" type="button"><svg class="ico"><use href="#i-camera"/></svg>Capture</button>
+    <button data-view="list" class="tab" type="button"><svg class="ico"><use href="#i-receipts"/></svg>Receipts</button>
+    <button data-view="export" class="tab" type="button"><svg class="ico"><use href="#i-export"/></svg>Export</button>
+    <button data-view="settings" class="tab" type="button"><svg class="ico"><use href="#i-settings"/></svg>Settings</button>
   </nav>
 
   <div id="toast" class="toast hidden"></div>
+
+  <!-- Full-screen zoomable photo -->
+  <div id="viewer" class="viewer hidden" role="dialog" aria-label="Receipt photo">
+    <button type="button" id="viewer-close" class="viewer-close" aria-label="Close"><svg class="ico"><use href="#i-close"/></svg></button>
+    <img id="viewer-img" alt="Receipt" />
+  </div>
 
   <!-- Printable expense claim (visible only when printing) -->
   <section id="print-view" class="print-only"></section>

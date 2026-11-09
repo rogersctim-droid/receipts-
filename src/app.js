@@ -6,7 +6,7 @@ import {
 import { buildZip } from './zip.js';
 import { readReceipt, ocrSupported, preloadOcr } from './ocr.js';
 
-export const APP_VERSION = '1.1.3';
+export const APP_VERSION = '1.2.0';
 
 const $ = (sel) => document.querySelector(sel);
 const state = {
@@ -16,7 +16,9 @@ const state = {
   pendingImage: null, // { full: Blob, thumb: Blob } for a receipt not yet saved
   taxTouched: false,
   initialValues: null, // field values when the form opened; OCR only fills fields still at these values
+  openSnapshot: null, // every field as it was when the form opened, for the unsaved-changes check
   ocrToken: 0,
+  followup: null, // { kind: 'xero'|'claim', receipts, text } after an export
   previousView: 'capture',
   view: 'capture',
   thumbUrls: new Map(),
@@ -55,6 +57,14 @@ function download(blob, name) {
   document.body.appendChild(a);
   a.click();
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+}
+async function deliver(blob, name, title) {
+  const file = new File([blob], name, { type: blob.type });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title }); return 'shared'; } catch (err) { if (err.name === 'AbortError') return 'cancelled'; }
+  }
+  download(blob, name);
+  return 'downloaded';
 }
 function csvBlob(text) {
   return new Blob([text], { type: 'text/csv;charset=utf-8' });
@@ -121,9 +131,9 @@ async function receiptItem(r) {
   const url = img ? thumbUrl(r.id, img.thumb) : null;
   const badges = [];
   if (r.client) badges.push(`<span class="badge">${escapeHtml(r.client)}</span>`);
-  badges.push(r.exportedXero ? '<span class="badge ok">Xero ✓</span>' : '<span class="badge warn">Not in Xero</span>');
-  if (r.billable) badges.push(r.exportedClaim ? '<span class="badge ok">Claimed ✓</span>' : '<span class="badge warn">To claim</span>');
-  if (r.paidWith === 'personal') badges.push('<span class="badge">Personal</span>');
+  if (r.exportedXero) badges.push('<span class="badge ok">Xero ✓</span>');
+  if (r.billable && r.exportedClaim) badges.push('<span class="badge ok">Claimed ✓</span>');
+  if (r.paidWith === 'personal') badges.push('<span class="badge">Paid personally</span>');
   li.innerHTML = `
     ${url ? `<img src="${url}" alt="" />` : '<div class="thumb-empty">🧾</div>'}
     <div class="main">
@@ -201,13 +211,94 @@ async function showEditImage(blob) {
   if (blob) {
     const url = URL.createObjectURL(blob);
     img.src = url; img.dataset.url = url;
-    img.classList.remove('hidden');
+    $('#btn-view-photo').classList.remove('hidden');
     $('#edit-noimage').classList.add('hidden');
   } else {
     img.removeAttribute('src'); delete img.dataset.url;
-    img.classList.add('hidden');
+    $('#btn-view-photo').classList.add('hidden');
     $('#edit-noimage').classList.remove('hidden');
   }
+}
+
+// ---------- full-screen photo viewer with pinch zoom ----------
+const viewer = { scale: 1, x: 0, y: 0, start: null };
+function viewerApply() {
+  $('#viewer-img').style.transform = `translate(${viewer.x}px, ${viewer.y}px) scale(${viewer.scale})`;
+}
+function openViewer() {
+  const src = $('#edit-image').src;
+  if (!src) return;
+  const img = $('#viewer-img');
+  img.src = src;
+  viewer.scale = 1; viewer.x = 0; viewer.y = 0; viewerApply();
+  $('#viewer').classList.remove('hidden');
+}
+function closeViewer() { $('#viewer').classList.add('hidden'); }
+function bindViewer() {
+  const el = $('#viewer');
+  const img = $('#viewer-img');
+  let lastTap = 0;
+  const dist = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+  const mid = (t) => ({ x: (t[0].clientX + t[1].clientX) / 2, y: (t[0].clientY + t[1].clientY) / 2 });
+  const clamp = () => {
+    viewer.scale = Math.min(6, Math.max(1, viewer.scale));
+    if (viewer.scale === 1) { viewer.x = 0; viewer.y = 0; }
+  };
+  // Image-space point under a screen point, given the current transform.
+  const toImage = (sx, sy) => { const r = img.getBoundingClientRect(); return { x: (sx - r.left) / viewer.scale, y: (sy - r.top) / viewer.scale }; };
+  // Set scale so that image point p stays under screen point s.
+  const zoomAbout = (p, s2, scale) => {
+    const r0 = img.getBoundingClientRect();
+    const originX = r0.left - viewer.x; const originY = r0.top - viewer.y; // untransformed top-left
+    viewer.scale = scale;
+    viewer.x = s2.x - originX - p.x * scale;
+    viewer.y = s2.y - originY - p.y * scale;
+  };
+  el.addEventListener('touchstart', (e) => {
+    if (e.target === $('#viewer-close')) return;
+    e.preventDefault();
+    const t = e.touches;
+    if (t.length === 2) {
+      const m = mid(t);
+      viewer.start = { kind: 'pinch', d: dist(t), p: toImage(m.x, m.y), scale: viewer.scale };
+    } else if (t.length === 1) {
+      const now = Date.now();
+      if (now - lastTap < 300) {
+        if (viewer.scale > 1) { viewer.scale = 1; viewer.x = 0; viewer.y = 0; }
+        else zoomAbout(toImage(t[0].clientX, t[0].clientY), { x: t[0].clientX, y: t[0].clientY }, 2.5);
+        clamp(); viewerApply(); lastTap = 0; viewer.start = null; return;
+      }
+      lastTap = now;
+      viewer.start = { kind: 'pan', px: t[0].clientX, py: t[0].clientY, x: viewer.x, y: viewer.y, moved: false };
+    }
+  }, { passive: false });
+  el.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    const st = viewer.start; if (!st) return;
+    const t = e.touches;
+    if (st.kind === 'pinch' && t.length === 2) {
+      const m = mid(t);
+      zoomAbout(st.p, m, Math.min(6, Math.max(1, st.scale * (dist(t) / st.d))));
+    } else if (st.kind === 'pan' && t.length === 1 && viewer.scale > 1) {
+      viewer.x = st.x + (t[0].clientX - st.px); viewer.y = st.y + (t[0].clientY - st.py);
+      if (Math.abs(t[0].clientX - st.px) > 6 || Math.abs(t[0].clientY - st.py) > 6) st.moved = true;
+    }
+    viewerApply();
+  }, { passive: false });
+  el.addEventListener('touchend', (e) => {
+    const st = viewer.start;
+    if (st && st.kind === 'pan' && !st.moved && viewer.scale === 1 && e.touches.length === 0) {
+      // Single tap on an unzoomed photo closes it (after the double-tap window).
+      setTimeout(() => { if (Date.now() - lastTap >= 300 && viewer.scale === 1) closeViewer(); }, 310);
+    }
+    if (e.touches.length === 0) { clamp(); viewerApply(); viewer.start = null; }
+    else if (e.touches.length === 1) viewer.start = { kind: 'pan', px: e.touches[0].clientX, py: e.touches[0].clientY, x: viewer.x, y: viewer.y, moved: true };
+  });
+  // Mouse: wheel to zoom, click to close when not zoomed.
+  el.addEventListener('wheel', (e) => { e.preventDefault(); viewer.scale *= e.deltaY < 0 ? 1.15 : 0.87; clamp(); viewerApply(); }, { passive: false });
+  el.addEventListener('click', (e) => { if (e.target !== img && viewer.scale === 1) closeViewer(); });
+  $('#viewer-close').addEventListener('click', closeViewer);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeViewer(); });
 }
 async function openEdit(id, pending) {
   state.currentId = id;
@@ -219,7 +310,7 @@ async function openEdit(id, pending) {
   $('#f-total').value = r ? money(r.total) : '';
   $('#f-merchant').value = r ? r.merchant : '';
   $('#f-date').value = r ? r.date : todayIso();
-  $('#f-category').value = r ? r.category : 'taxi';
+  $('#f-category').value = r ? r.category : (s.lastCategory || 'meals');
   $('#f-tax').value = r ? money(r.tax) : '';
   $('#f-notax').checked = r ? !!r.noTax : false;
   $('#f-paid').value = r ? r.paidWith : 'personal';
@@ -238,10 +329,12 @@ async function openEdit(id, pending) {
   else if (r && r.hasImage) await showEditImage((await db.getImage(r.id))?.full);
   else await showEditImage(null);
   state.initialValues = snapshotFields();
+  state.openSnapshot = formSnapshot();
   state.ocrToken += 1;
   clearSuggested();
   $('#ocr-status').classList.add('hidden');
-  $('#btn-ocr').classList.toggle('hidden', !(pending || (r && r.hasImage)) || !ocrSupported());
+  $('#ocr-debug').classList.add('hidden');
+  $('#btn-ocr').classList.toggle('hidden', !(pending || (r && r.hasImage)) || !ocrSupported() || state.settings.ocr === false);
   showView('edit');
   if (!r) setTimeout(() => $('#f-total').focus(), 50);
 }
@@ -251,7 +344,25 @@ function snapshotFields() {
   return Object.fromEntries(OCR_FIELDS.map((sel) => [sel, $(sel).value]));
 }
 function clearSuggested() {
-  OCR_FIELDS.forEach((sel) => $(sel).classList.remove('suggested'));
+  OCR_FIELDS.forEach((sel) => { $(sel).classList.remove('suggested'); $(sel).closest('label').classList.remove('from-photo'); });
+}
+function markFromPhoto(sel) {
+  $(sel).classList.add('suggested');
+  $(sel).closest('label').classList.add('from-photo');
+}
+const ALL_FIELDS = ['#f-total', '#f-merchant', '#f-date', '#f-category', '#f-tax', '#f-paid', '#f-client', '#f-notes'];
+function formSnapshot() {
+  return JSON.stringify([...ALL_FIELDS.map((sel) => $(sel).value), $('#f-notax').checked, $('#f-billable').checked]);
+}
+function editIsDirty() {
+  return state.view === 'edit' && (!!state.pendingImage || formSnapshot() !== state.openSnapshot);
+}
+// Returns true if it is OK to leave the edit screen.
+function confirmLeaveEdit() {
+  if (!editIsDirty()) return true;
+  const ok = confirm(state.currentId ? 'Discard your changes to this receipt?' : 'Discard this receipt? The photo and details will be lost.');
+  if (ok) state.pendingImage = null;
+  return ok;
 }
 function setOcrStatus(text, cls) {
   const el = $('#ocr-status');
@@ -296,19 +407,19 @@ async function runOcr(blob) {
     const untouched = (sel) => $(sel).value === (init[sel] ?? '');
     const found = [];
     if (parsed.total != null && untouched('#f-total')) {
-      $('#f-total').value = money(parsed.total); $('#f-total').classList.add('suggested'); found.push('total');
+      $('#f-total').value = money(parsed.total); markFromPhoto('#f-total'); found.push('total');
       if (untouched('#f-tax') && !$('#f-notax').checked) {
-        if (parsed.tax != null) { $('#f-tax').value = money(parsed.tax); $('#f-tax').classList.add('suggested'); found.push('GST'); }
+        if (parsed.tax != null) { $('#f-tax').value = money(parsed.tax); markFromPhoto('#f-tax'); found.push('GST'); }
         else recomputeTax();
       }
     }
-    if (parsed.merchant && untouched('#f-merchant')) { $('#f-merchant').value = parsed.merchant; $('#f-merchant').classList.add('suggested'); found.push('merchant'); }
-    if (parsed.date && untouched('#f-date')) { $('#f-date').value = parsed.date; $('#f-date').classList.add('suggested'); found.push('date'); }
-    if (parsed.category && untouched('#f-category')) { $('#f-category').value = parsed.category; $('#f-category').classList.add('suggested'); found.push('category'); }
+    if (parsed.merchant && untouched('#f-merchant')) { $('#f-merchant').value = parsed.merchant; markFromPhoto('#f-merchant'); found.push('merchant'); }
+    if (parsed.date && untouched('#f-date')) { $('#f-date').value = parsed.date; markFromPhoto('#f-date'); found.push('date'); }
+    if (parsed.category && untouched('#f-category')) { $('#f-category').value = parsed.category; markFromPhoto('#f-category'); found.push('category'); }
     const words = (text || '').trim().split(/\s+/).filter(Boolean).length;
     $('#ocr-text').textContent = `${Math.round(confidence || 0)}% confidence, ${words} words\n\n${(text || '').trim() || '(no text found)'}`;
-    $('#ocr-debug').classList.remove('hidden');
-    if (found.length) setOcrStatus(`Read from photo: ${found.join(', ')}. Please check against the receipt.`, 'ok');
+    $('#ocr-debug').classList.toggle('hidden', !(state.settings.showOcrText || !found.length));
+    if (found.length) setOcrStatus(`Read from photo: ${found.join(', ')}. Tap the photo to zoom and check.`, 'ok');
     else if (words < 5) setOcrStatus('Could not make out any text. Try again with the receipt flat, filling the frame, in good light.', 'warn');
     else setOcrStatus('Read the text but could not find a total or date in it. Please enter the details.', 'warn');
   } catch (err) {
@@ -354,6 +465,8 @@ async function saveEdit(e) {
   await db.putReceipt(r);
   state.receipts = state.receipts.filter((x) => x.id !== id).concat(r);
   state.pendingImage = null;
+  state.openSnapshot = formSnapshot();
+  if (state.settings.lastCategory !== r.category) { state.settings.lastCategory = r.category; db.putSettings(state.settings).catch(() => {}); }
   toast('Saved');
   showView(state.previousView);
 }
@@ -401,6 +514,7 @@ function exportSelection() {
 }
 function renderExport() {
   fillClientSelect($('#e-client'));
+  clearFollowup();
   const rs = exportSelection();
   $('#export-summary').innerHTML = summaryHtml(rs);
   document.querySelectorAll('#view-export .btn').forEach((b) => { b.disabled = rs.length === 0; });
@@ -420,9 +534,17 @@ async function imageEntries(rs) {
   }
   return out;
 }
-async function offerMark(kind, rs) {
-  const label = kind === 'xero' ? 'in Xero' : 'claimed';
-  if (confirm(`Mark these ${rs.length} receipt${rs.length === 1 ? '' : 's'} as ${label}?`)) await markExported(kind, rs);
+function offerMark(kind, rs, what) {
+  const n = `${rs.length} receipt${rs.length === 1 ? '' : 's'}`;
+  state.followup = { kind, receipts: rs };
+  $('#export-followup-text').textContent = `${what} for ${n}. When it is in Xero, mark ${rs.length === 1 ? 'it' : 'them'} as ${kind === 'xero' ? '“in Xero”' : '“claimed”'} so ${rs.length === 1 ? 'it is' : 'they are'} not exported twice.`;
+  $('#btn-followup-mark').textContent = kind === 'xero' ? 'Mark as in Xero' : 'Mark as claimed';
+  $('#export-followup').classList.remove('hidden');
+  $('#export-followup').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+function clearFollowup() {
+  state.followup = null;
+  $('#export-followup').classList.add('hidden');
 }
 async function markExported(kind, rs) {
   const now = new Date().toISOString();
@@ -436,9 +558,10 @@ async function markExported(kind, rs) {
 
 async function exportBills() {
   const rs = requireSelection(); if (!rs.length) return;
-  download(csvBlob(billsCsv(rs, state.settings)), `xero-bills-${stamp()}.csv`);
-  toast('Bills CSV downloaded. In Xero choose “Tax Inclusive” when importing.', 5000);
-  setTimeout(() => offerMark('xero', rs), 600);
+  const how = await deliver(csvBlob(billsCsv(rs, state.settings)), `xero-bills-${stamp()}.csv`, 'Xero bills import');
+  if (how === 'cancelled') return;
+  toast('In Xero choose “Tax Inclusive” when importing.', 5000);
+  offerMark('xero', rs, `Bills CSV ${how}`);
 }
 async function exportImagesZip() {
   const rs = requireSelection(); if (!rs.length) return;
@@ -447,7 +570,7 @@ async function exportImagesZip() {
   const zipEntries = [];
   for (const e of entries) zipEntries.push({ name: e.name, data: new Uint8Array(await e.blob.arrayBuffer()), date: new Date() });
   zipEntries.push({ name: 'receipts.csv', data: new TextEncoder().encode(claimCsv(rs, state.settings)), date: new Date() });
-  download(new Blob([buildZip(zipEntries)], { type: 'application/zip' }), `receipt-images-${stamp()}.zip`);
+  await deliver(new Blob([buildZip(zipEntries)], { type: 'application/zip' }), `receipt-images-${stamp()}.zip`, 'Receipt photos');
 }
 async function shareToXero() {
   const rs = requireSelection(); if (!rs.length) return;
@@ -462,7 +585,7 @@ async function shareToXero() {
     }
     try {
       await navigator.share({ files, title: 'Receipts for Xero', text });
-      setTimeout(() => offerMark('xero', rs), 600);
+      offerMark('xero', rs, 'Photos shared');
     } catch (err) {
       if (err.name !== 'AbortError') toast(`Share failed: ${err.message}`);
     }
@@ -478,13 +601,14 @@ async function exportInvoice() {
   if (rs.length < all.length) toast(`Skipping ${all.length - rs.length} receipt(s) not marked as billable.`, 3500);
   const unassigned = rs.filter((r) => !r.client);
   if (unassigned.length && !confirm(`${unassigned.length} receipt(s) have no client and will be put on an “Unassigned” invoice. Continue?`)) return;
-  download(csvBlob(invoiceCsv(rs, state.settings, { invoiceDate: todayIso() })), `xero-sales-invoices-${stamp()}.csv`);
-  toast('Invoice CSV downloaded. Import as draft invoices in Xero, then review.', 5000);
-  setTimeout(() => offerMark('claim', rs), 600);
+  const how = await deliver(csvBlob(invoiceCsv(rs, state.settings, { invoiceDate: todayIso() })), `xero-sales-invoices-${stamp()}.csv`, 'Xero sales invoice import');
+  if (how === 'cancelled') return;
+  toast('Import as draft invoices in Xero, then review before approving.', 5000);
+  offerMark('claim', rs, `Invoice CSV ${how}`);
 }
 async function exportClaimCsv() {
   const rs = requireSelection(); if (!rs.length) return;
-  download(csvBlob(claimCsv(rs, state.settings)), `expenses-${stamp()}.csv`);
+  await deliver(csvBlob(claimCsv(rs, state.settings)), `expenses-${stamp()}.csv`, 'Expense list');
 }
 async function exportClaimPdf() {
   const rs = requireSelection(); if (!rs.length) return;
@@ -513,7 +637,7 @@ async function exportClaimPdf() {
   await Promise.all([...$('#print-view').querySelectorAll('img')].map((img) => img.complete ? null : new Promise((res) => { img.onload = res; img.onerror = res; })));
   window.addEventListener('afterprint', () => {
     urls.forEach((e) => URL.revokeObjectURL(e.url));
-    setTimeout(() => offerMark('claim', rs), 400);
+    offerMark('claim', rs, 'Expense claim prepared');
   }, { once: true });
   toast('Use “Save as PDF” in the print dialog.', 4000);
   window.print();
@@ -541,6 +665,7 @@ function renderSettings() {
   $('#s-client').value = s.defaultClient || '';
   $('#s-xeroemail').value = s.xeroEmail || '';
   $('#s-ocr').checked = s.ocr !== false;
+  $('#s-ocrtext').checked = !!s.showOcrText;
   $('#s-version').textContent = `Receipts v${APP_VERSION} · ${state.receipts.length} receipts stored on this device`;
 }
 function applyRegionDefaults() {
@@ -579,6 +704,7 @@ async function saveSettings(e) {
     defaultClient: $('#s-client').value.trim(),
     xeroEmail: $('#s-xeroemail').value.trim(),
     ocr: $('#s-ocr').checked,
+    showOcrText: $('#s-ocrtext').checked,
   };
   await db.putSettings(state.settings);
   toast('Settings saved');
@@ -634,8 +760,17 @@ async function wipe() {
 
 // ---------- wiring ----------
 function bind() {
-  document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => showView(t.dataset.view)));
-  $('#btn-back').addEventListener('click', () => { state.pendingImage = null; showView(state.previousView); });
+  document.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => { if (confirmLeaveEdit()) showView(t.dataset.view); }));
+  $('#btn-back').addEventListener('click', () => { if (confirmLeaveEdit()) showView(state.previousView); });
+  $('#btn-view-photo').addEventListener('click', openViewer);
+  bindViewer();
+  $('#btn-followup-mark').addEventListener('click', async () => {
+    if (!state.followup) return;
+    const { kind, receipts } = state.followup;
+    clearFollowup();
+    await markExported(kind, receipts);
+  });
+  $('#btn-followup-dismiss').addEventListener('click', clearFollowup);
 
   $('#file-camera').addEventListener('change', (e) => { handleNewPhoto(e.target.files[0]); e.target.value = ''; });
   $('#file-gallery').addEventListener('change', (e) => { handleNewPhoto(e.target.files[0]); e.target.value = ''; });
@@ -645,7 +780,7 @@ function bind() {
   $('#edit-form').addEventListener('submit', saveEdit);
   $('#btn-delete').addEventListener('click', deleteCurrent);
   $('#f-total').addEventListener('input', recomputeTax);
-  OCR_FIELDS.forEach((sel) => $(sel).addEventListener('input', () => $(sel).classList.remove('suggested')));
+  OCR_FIELDS.forEach((sel) => $(sel).addEventListener('input', () => { $(sel).classList.remove('suggested'); $(sel).closest('label').classList.remove('from-photo'); }));
   $('#btn-ocr-copy').addEventListener('click', async () => {
     try { await navigator.clipboard.writeText($('#ocr-text').textContent); toast('Copied'); } catch { toast('Could not copy. Long-press the text to select it.'); }
   });
@@ -666,6 +801,7 @@ function bind() {
 
   ['#l-status', '#l-client', '#l-month'].forEach((sel) => $(sel).addEventListener('change', renderList));
   ['#e-status', '#e-client', '#e-from', '#e-to'].forEach((sel) => $(sel).addEventListener('change', renderExport));
+  window.addEventListener('beforeunload', (e) => { if (editIsDirty()) { e.preventDefault(); e.returnValue = ''; } });
 
   $('#x-bills').addEventListener('click', exportBills);
   $('#x-images').addEventListener('click', exportImagesZip);
