@@ -62,6 +62,8 @@
           <div id="edit-noimage" class="noimage">No photo</div>
           <label class="chip-btn" for="file-replace">Change photo</label>
           <input id="file-replace" type="file" accept="image/*" capture="environment" hidden />
+          <button type="button" id="btn-ocr" class="chip-btn hidden">Read details from photo</button>
+          <div id="ocr-status" class="status-line hidden"></div>
         </div>
 
         <label>Total (incl. tax)
@@ -205,6 +207,10 @@
         <label>Expense, no tax <input id="s-tax-expn" type="text" /></label>
         <label>Income, standard <input id="s-tax-inc" type="text" /></label>
         <label>Income, zero-rated <input id="s-tax-inc0" type="text" /></label>
+
+        <h2>Reading receipts</h2>
+        <label class="check"><input id="s-ocr" type="checkbox" /> Read total, date, merchant and GST from photos automatically</label>
+        <p class="muted small">Runs entirely on your phone; nothing is uploaded. The first use downloads about 7 MB of recognition data, which is then kept for offline use. Always check the suggested values against the receipt.</p>
 
         <h2>You</h2>
         <label>Your name (shown on expense claims) <input id="s-name" type="text" /></label>

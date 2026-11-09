@@ -58,6 +58,7 @@ export function defaultSettings(region = 'AU') {
     yourName: '',
     defaultClient: '',
     invoicePrefix: 'EXP',
+    ocr: true,
   };
 }
 

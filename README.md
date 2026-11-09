@@ -13,7 +13,7 @@ no account, no server, no subscription.
 
 | Step | How |
 | --- | --- |
-| Capture | Tap **Take photo of receipt**. Enter total, merchant, category. Tax is calculated for you. |
+| Capture | Tap **Take photo of receipt**. The app reads the total, GST, merchant, date and a category from the photo and fills them in for you to check. Anything it misses you type. |
 | Tag | Mark who paid (personal card = reimburse me) and which client it should be billed to. |
 | Into Xero | **Export › Download bills CSV** then Xero › Business › Bills to pay › Import. Or **Share photos to Xero bills inbox** to email the photos to Xero, which reads them itself. |
 | Invoice a client | **Export › Download sales invoice CSV** then Xero › Business › Invoices › Import. One draft invoice per client with a line per receipt. |
@@ -54,6 +54,24 @@ share sheet. Choose Mail and paste the address.
   true reimbursements where you paid as the client's agent. Check the treatment with your
   accountant and your client contracts.
 
+## Reading receipts (OCR)
+
+Text recognition runs on the phone using Tesseract (bundled under `vendor/tesseract`, Apache 2.0).
+Nothing is uploaded. The first time it runs it fetches about 7 MB of engine and language data,
+which the service worker then keeps for offline use. Recognition takes a few seconds on a phone.
+
+Fields filled from the photo are highlighted. The app only fills fields you have not already
+typed in, and you can tap **Read details from photo** to run it again. Turn it off in Settings if
+you prefer to type. Expect it to be right most of the time on printed receipts and poor on
+handwritten or crumpled ones; always glance at the total before saving.
+
+How it decides: the total is the amount on a line containing "total", "amount due" or similar
+(ignoring subtotals), falling back to the card payment line, then to the largest amount. GST is
+the amount on a line mentioning GST or tax. Dates are read day-first (month-first for the US
+region). Merchant is a known brand if one appears, otherwise the first proper line of text.
+Category is guessed from keywords (Uber, parking, cafe, nights, Officeworks and so on). All of
+this is in `src/ocr-parse.js` and tested in `tests/ocr-parse.test.mjs`.
+
 ## Backups
 
 All data lives in the browser storage on your phone. Settings › **Download full backup** writes a
@@ -77,6 +95,8 @@ Files:
 - `src/export.js`: pure functions that produce the Xero bills CSV, Xero sales invoice CSV and
   expense claim CSV. Covered by `tests/`.
 - `src/zip.js`: tiny ZIP writer for the receipt-image download.
+- `src/ocr.js`, `src/ocr-parse.js`: on-device text recognition and the receipt parser.
+- `vendor/tesseract/`: Tesseract.js 7, its WebAssembly core and the English model.
 - `sw.js`, `manifest.webmanifest`, `icons/`: offline support and home-screen install.
 - `.github/workflows/pages.yml`: runs the tests and deploys to GitHub Pages on every push.
 

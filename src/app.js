@@ -4,8 +4,9 @@ import {
   billsCsv, invoiceCsv, claimCsv, summarize, filterReceipts, formatXeroDate, round2,
 } from './export.js';
 import { buildZip } from './zip.js';
+import { readReceipt, ocrSupported } from './ocr.js';
 
-export const APP_VERSION = '1.0.0';
+export const APP_VERSION = '1.1.0';
 
 const $ = (sel) => document.querySelector(sel);
 const state = {
@@ -14,6 +15,8 @@ const state = {
   currentId: null,
   pendingImage: null, // { full: Blob, thumb: Blob } for a receipt not yet saved
   taxTouched: false,
+  initialValues: null, // field values when the form opened; OCR only fills fields still at these values
+  ocrToken: 0,
   previousView: 'capture',
   view: 'capture',
   thumbUrls: new Map(),
@@ -234,8 +237,66 @@ async function openEdit(id, pending) {
   if (pending) await showEditImage(pending.full);
   else if (r && r.hasImage) await showEditImage((await db.getImage(r.id))?.full);
   else await showEditImage(null);
+  state.initialValues = snapshotFields();
+  state.ocrToken += 1;
+  clearSuggested();
+  $('#ocr-status').classList.add('hidden');
+  $('#btn-ocr').classList.toggle('hidden', !(pending || (r && r.hasImage)) || !ocrSupported());
   showView('edit');
   if (!r) setTimeout(() => $('#f-total').focus(), 50);
+}
+
+const OCR_FIELDS = ['#f-total', '#f-merchant', '#f-date', '#f-tax', '#f-category'];
+function snapshotFields() {
+  return Object.fromEntries(OCR_FIELDS.map((sel) => [sel, $(sel).value]));
+}
+function clearSuggested() {
+  OCR_FIELDS.forEach((sel) => $(sel).classList.remove('suggested'));
+}
+function setOcrStatus(text, cls) {
+  const el = $('#ocr-status');
+  el.textContent = text;
+  el.className = `status-line ${cls || ''}`;
+  el.classList.toggle('hidden', !text);
+}
+async function currentImageBlob() {
+  if (state.pendingImage) return state.pendingImage.full;
+  if (state.currentId) return (await db.getImage(state.currentId))?.full || null;
+  return null;
+}
+// Run OCR on the receipt photo and fill in fields the user has not touched yet.
+async function runOcr(blob) {
+  if (!blob || !ocrSupported()) return;
+  const token = ++state.ocrToken;
+  const live = () => token === state.ocrToken && state.view === 'edit';
+  setOcrStatus('Reading receipt…');
+  try {
+    const { parsed } = await readReceipt(blob, {
+      dateFormat: state.settings.dateFormat,
+      onProgress: ({ stage, progress }) => {
+        if (!live()) return;
+        setOcrStatus(stage === 'loading' ? 'Preparing receipt reader (first time only)…' : `Reading receipt… ${Math.round((progress || 0) * 100)}%`);
+      },
+    });
+    if (!live()) return;
+    const init = state.initialValues || {};
+    const untouched = (sel) => $(sel).value === (init[sel] ?? '');
+    const found = [];
+    if (parsed.total != null && untouched('#f-total')) {
+      $('#f-total').value = money(parsed.total); $('#f-total').classList.add('suggested'); found.push('total');
+      if (untouched('#f-tax') && !$('#f-notax').checked) {
+        if (parsed.tax != null) { $('#f-tax').value = money(parsed.tax); $('#f-tax').classList.add('suggested'); found.push('GST'); }
+        else recomputeTax();
+      }
+    }
+    if (parsed.merchant && untouched('#f-merchant')) { $('#f-merchant').value = parsed.merchant; $('#f-merchant').classList.add('suggested'); found.push('merchant'); }
+    if (parsed.date && untouched('#f-date')) { $('#f-date').value = parsed.date; $('#f-date').classList.add('suggested'); found.push('date'); }
+    if (parsed.category && untouched('#f-category')) { $('#f-category').value = parsed.category; $('#f-category').classList.add('suggested'); found.push('category'); }
+    if (found.length) setOcrStatus(`Read from photo: ${found.join(', ')}. Please check against the receipt.`, 'ok');
+    else setOcrStatus('Could not read this receipt. Please enter the details.', 'warn');
+  } catch (err) {
+    if (live()) setOcrStatus(`Receipt reader unavailable: ${err.message}`, 'warn');
+  }
 }
 function recomputeTax() {
   if (state.taxTouched || $('#f-notax').checked) return;
@@ -292,6 +353,7 @@ async function handleNewPhoto(file) {
     const img = await processImage(file);
     $('#toast').classList.add('hidden');
     await openEdit(null, img);
+    if (state.settings.ocr) runOcr(img.full);
   } catch (err) {
     toast(`Could not read that image: ${err.message}`);
   }
@@ -301,7 +363,9 @@ async function handleReplacePhoto(file) {
   try {
     state.pendingImage = await processImage(file);
     await showEditImage(state.pendingImage.full);
+    $('#btn-ocr').classList.toggle('hidden', !ocrSupported());
     toast('Photo updated. Save to keep it.');
+    if (state.settings.ocr) runOcr(state.pendingImage.full);
   } catch (err) {
     toast(`Could not read that image: ${err.message}`);
   }
@@ -455,6 +519,7 @@ function renderSettings() {
   $('#s-name').value = s.yourName || '';
   $('#s-client').value = s.defaultClient || '';
   $('#s-xeroemail').value = s.xeroEmail || '';
+  $('#s-ocr').checked = s.ocr !== false;
   $('#s-version').textContent = `Receipts v${APP_VERSION} · ${state.receipts.length} receipts stored on this device`;
 }
 function applyRegionDefaults() {
@@ -492,6 +557,7 @@ async function saveSettings(e) {
     yourName: $('#s-name').value.trim(),
     defaultClient: $('#s-client').value.trim(),
     xeroEmail: $('#s-xeroemail').value.trim(),
+    ocr: $('#s-ocr').checked,
   };
   await db.putSettings(state.settings);
   toast('Settings saved');
@@ -558,6 +624,15 @@ function bind() {
   $('#edit-form').addEventListener('submit', saveEdit);
   $('#btn-delete').addEventListener('click', deleteCurrent);
   $('#f-total').addEventListener('input', recomputeTax);
+  OCR_FIELDS.forEach((sel) => $(sel).addEventListener('input', () => $(sel).classList.remove('suggested')));
+  $('#btn-ocr').addEventListener('click', async () => {
+    // Re-read: treat whatever is in the form now as the baseline, so every field may be replaced.
+    const blob = await currentImageBlob();
+    if (!blob) return;
+    state.initialValues = snapshotFields();
+    state.taxTouched = false;
+    runOcr(blob);
+  });
   $('#f-tax').addEventListener('input', () => { state.taxTouched = true; });
   $('#f-notax').addEventListener('change', (e) => {
     $('#f-tax').disabled = e.target.checked;
