@@ -122,6 +122,21 @@ test('date formats', () => {
   assert.equal(findDate(['no date here'], { now }), null);
 });
 
+test('merchant: rejects logo garbage, uses thank-you footer', () => {
+  const p = parseReceiptText(`i IO
+ABN: 64640167515
+Sunshine Coast Airport
+Ph: 07 5406 2962
+TOTAL 23.10
+Thank You For Shopping at
+Bowlito, Sunshine Coast`, { now });
+  assert.equal(p.merchant, 'Bowlito');
+  const q = parseReceiptText('W110\nABN: 123\nTOTAL 5.00', { now });
+  assert.equal(q.merchant, null, 'no plausible name leaves the field blank');
+  const r = parseReceiptText('ine Coast Atrport\nPh: 07 5406 2962\nTOTAL 5.00', { now });
+  assert.equal(r.merchant, 'ine Coast Atrport', 'imperfect but plausible names are still offered');
+});
+
 test('empty input is safe', () => {
   const p = parseReceiptText('', { now });
   assert.deepEqual([p.merchant, p.total, p.tax, p.date, p.category], [null, null, null, null, null]);

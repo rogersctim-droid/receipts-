@@ -139,14 +139,23 @@ export function findDate(lines, { dateFormat = 'DMY', now = new Date() } = {}) {
 
 const SKIP_MERCHANT = /tax\s*invoice|\binvoice\b|\breceipt\b|\babn\b|\bacn\b|\bphone\b|\btel\b|\bph[:.]|www\.|https?:|@|welcome|thank|\bstore\b\s*\d|\border\b|\bdate\b|\btime\b|\bcashier\b|\bserved\b|\bterminal\b|\bmerchant\s*id|\bcopy\b/i;
 
+// A plausible business name: at least one real word of 3+ letters, mostly letters overall,
+// and not a short fragment like "i IO" that OCR makes of a stylised logo.
+function looksLikeName(line) {
+  const compact = line.replace(/\s/g, '');
+  const letters = (line.match(/[a-z]/gi) || []).length;
+  const words = line.split(/\s+/).filter((w) => /^[a-z][a-z'’&.-]{2,}$/i.test(w));
+  return letters >= 4 && words.length >= 1 && letters / Math.max(1, compact.length) >= 0.6 && !/[|\\/#@*_=~<>{}\[\]]/.test(line);
+}
+
 export function findMerchant(lines) {
   const text = lines.join('\n');
   for (const [re, name] of BRANDS) if (re.test(text)) return name;
+  // "Thank you for shopping at Bowlito, Sunshine Coast" style footers are very reliable.
+  const footer = text.match(/thank\s*you\s*for\s*(?:shopping|dining|visiting|your\s*(?:visit|business|custom|purchase))?\s*(?:at|with)\s+([A-Za-z][A-Za-z0-9'’&.\- ]{2,40}?)(?:[,!.\n]|$)/i);
+  if (footer && looksLikeName(footer[1])) return tidyName(footer[1]);
   for (const line of lines.slice(0, 8)) {
-    const letters = (line.match(/[a-z]/gi) || []).length;
-    if (letters < 3 || letters / line.replace(/\s/g, '').length < 0.6) continue;
-    if (SKIP_MERCHANT.test(line)) continue;
-    if (amountsIn(line).length) continue;
+    if (SKIP_MERCHANT.test(line) || amountsIn(line).length || !looksLikeName(line)) continue;
     return tidyName(line);
   }
   return null;
