@@ -86,11 +86,11 @@ h2 { font-size: 15px; text-transform: uppercase; letter-spacing: .04em; color: v
 form label, .filters label { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 0; }
 .filters label { margin: 0; }
 form input[type=text], form input[type=number], form input[type=date], form input[type=month], form input[type=email], form select, .filters select, .filters input {
-  display: block; width: 100%; margin-top: 4px; padding: 12px; font-size: 16px;
+  display: block; width: 100%; margin-top: 4px; padding: 12px; font-size: 16px; min-height: 48px; -webkit-appearance: none; appearance: none;
   border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--text);
 }
 form label.check { display: flex; align-items: center; gap: 10px; font-size: 15px; color: var(--text); margin-top: 14px; padding: 10px 12px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
-label.from-photo::after { content: 'from photo'; display: inline-block; margin-left: 8px; padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 600; background: var(--primary); color: var(--primary-ink); vertical-align: middle; }
+label.from-photo::after { content: 'from photo'; display: inline-block; margin: 6px 0 0; padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 600; background: var(--primary); color: var(--primary-ink); vertical-align: middle; }
 form label.check input { width: 22px; height: 22px; margin: 0; }
 .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .form-actions { display: flex; gap: 10px; margin-top: 20px; }
