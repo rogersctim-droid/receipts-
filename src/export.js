@@ -59,7 +59,10 @@ export function defaultSettings(region = 'AU') {
     defaultClient: '',
     invoicePrefix: 'EXP',
     ocr: true,
-    allowance: { enabled: true, amount: 165, categories: CATEGORIES.map((c) => c.key) },
+    // Meals and incidentals: coffee, food, local taxis. Flights, airport transfers and hotels
+    // belong in Travel / Accommodation, which do not count. A single receipt can also be
+    // excluded with its "Not part of my daily allowance" switch.
+    allowance: { v: 2, enabled: true, amount: 165, categories: ['meals', 'taxi', 'other'] },
   };
 }
 
@@ -70,7 +73,7 @@ export function allowanceStatus(receipts, settings, dateIso, { excludeId = null,
   const a = settings.allowance || {};
   const amount = Number(a.amount) || 0;
   const cats = new Set(a.categories && a.categories.length ? a.categories : CATEGORIES.map((c) => c.key));
-  const todays = receipts.filter((r) => r.date === dateIso && r.id !== excludeId && cats.has(r.category || 'other'));
+  const todays = receipts.filter((r) => r.date === dateIso && r.id !== excludeId && !r.allowanceExempt && cats.has(r.category || 'other'));
   const spent = round2(todays.reduce((n, r) => n + (Number(r.total) || 0), 0) + (Number(extra) || 0));
   return { enabled: !!a.enabled && amount > 0, amount, spent, left: round2(amount - spent), count: todays.length, over: spent > amount };
 }

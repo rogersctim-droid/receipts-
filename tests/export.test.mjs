@@ -127,4 +127,7 @@ test('daily allowance countdown', () => {
   assert.equal(preview.spent, 173.1);
   assert.equal(preview.over, true);
   assert.equal(allowanceStatus(today, { ...s, allowance: { enabled: false, amount: 165 } }, '2026-11-11').enabled, false);
+  const exempt = allowanceStatus([...today, { id: 'e', date: '2026-11-11', category: 'taxi', total: 90, allowanceExempt: true }], s, '2026-11-11');
+  assert.equal(exempt.spent, 63.1, 'airport taxi marked exempt is ignored');
+  assert.deepEqual(defaultSettings().allowance.categories, ['meals', 'taxi', 'other']);
 });

@@ -126,6 +126,7 @@
             <option value="company">Company card</option>
           </select>
         </label>
+        <label class="check" id="exempt-field"><input id="f-exempt" type="checkbox" /> Not part of my daily allowance (e.g. airport taxi)</label>
         <label class="check"><input id="f-billable" type="checkbox" /> Bill this to a client</label>
         <label id="client-field">Client
           <input id="f-client" type="text" list="client-list" placeholder="Client or project name" />
@@ -222,7 +223,7 @@
         <h2>Daily allowance</h2>
         <label class="check"><input id="s-allow-on" type="checkbox" /> Show how much I have left to spend each day</label>
         <label>Amount per day <input id="s-allow-amount" type="number" inputmode="decimal" step="0.01" min="0" /></label>
-        <div class="muted small" style="margin-top:10px">Categories that count towards it</div>
+        <div class="muted small" style="margin-top:10px">Categories that count towards it. Put flights, airport transfers and hotels under Travel or Accommodation so they stay out, or tick “Not part of my daily allowance” on an individual receipt.</div>
         <div id="s-allow-cats" class="cat-checks"></div>
 
         <h2>Region & tax</h2>

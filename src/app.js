@@ -6,7 +6,7 @@ import {
 import { buildZip } from './zip.js';
 import { readReceipt, ocrSupported, preloadOcr } from './ocr.js';
 
-export const APP_VERSION = '1.3.0';
+export const APP_VERSION = '1.3.1';
 
 const $ = (sel) => document.querySelector(sel);
 const state = {
@@ -178,7 +178,9 @@ function renderTotalHint() {
   const cat = $('#f-category').value;
   const total = Number($('#f-total').value) || 0;
   const a = state.settings.allowance || {};
-  const counts = a.enabled && date === todayIso() && (!a.categories || !a.categories.length || a.categories.includes(cat));
+  const inCategory = a.enabled && (!a.categories || !a.categories.length || a.categories.includes(cat));
+  $('#exempt-field').classList.toggle('hidden', !inCategory);
+  const counts = inCategory && date === todayIso() && !$('#f-exempt').checked;
   if (!counts) { hint.classList.add('hidden'); return; }
   const st = allowanceStatus(state.receipts, state.settings, date, { excludeId: state.currentId, extra: total });
   hint.classList.remove('hidden');
@@ -346,6 +348,7 @@ async function openEdit(id, pending) {
   $('#f-tax').value = r ? money(r.tax) : '';
   $('#f-notax').checked = r ? !!r.noTax : false;
   $('#f-paid').value = r ? r.paidWith : 'personal';
+  $('#f-exempt').checked = r ? !!r.allowanceExempt : false;
   $('#f-billable').checked = r ? !!r.billable : !!s.defaultClient;
   $('#f-client').value = r ? r.client || '' : s.defaultClient || '';
   $('#f-notes').value = r ? r.notes || '' : '';
@@ -385,7 +388,7 @@ function markFromPhoto(sel) {
 }
 const ALL_FIELDS = ['#f-total', '#f-merchant', '#f-date', '#f-category', '#f-tax', '#f-paid', '#f-client', '#f-notes'];
 function formSnapshot() {
-  return JSON.stringify([...ALL_FIELDS.map((sel) => $(sel).value), $('#f-notax').checked, $('#f-billable').checked]);
+  return JSON.stringify([...ALL_FIELDS.map((sel) => $(sel).value), $('#f-notax').checked, $('#f-billable').checked, $('#f-exempt').checked]);
 }
 function editIsDirty() {
   return state.view === 'edit' && (!!state.pendingImage || formSnapshot() !== state.openSnapshot);
@@ -485,6 +488,7 @@ async function saveEdit(e) {
     noTax: $('#f-notax').checked,
     paidWith: $('#f-paid').value,
     billable,
+    allowanceExempt: $('#f-exempt').checked,
     client: billable ? $('#f-client').value.trim() : '',
     notes: $('#f-notes').value.trim(),
     currency: state.settings.currency,
@@ -502,7 +506,8 @@ async function saveEdit(e) {
   state.openSnapshot = formSnapshot();
   if (state.settings.lastCategory !== r.category) { state.settings.lastCategory = r.category; db.putSettings(state.settings).catch(() => {}); }
   const st = allowanceStatus(state.receipts, state.settings, todayIso());
-  if (st.enabled && r.date === todayIso()) toast(st.over ? `Saved · ${fmtMoney(-st.left)} over today's allowance` : `Saved · ${fmtMoney(st.left)} left today`, 3500);
+  const counted = st.enabled && r.date === todayIso() && !r.allowanceExempt && (!state.settings.allowance.categories || state.settings.allowance.categories.includes(r.category));
+  if (counted) toast(st.over ? `Saved · ${fmtMoney(-st.left)} over today's allowance` : `Saved · ${fmtMoney(st.left)} left today`, 3500);
   else toast('Saved');
   showView(state.previousView);
 }
@@ -828,6 +833,7 @@ function bind() {
   $('#f-total').addEventListener('input', recomputeTax);
   ['#f-total', '#f-date', '#f-category'].forEach((sel) => $(sel).addEventListener('input', renderTotalHint));
   $('#f-category').addEventListener('change', renderTotalHint);
+  $('#f-exempt').addEventListener('change', renderTotalHint);
   OCR_FIELDS.forEach((sel) => $(sel).addEventListener('input', () => { $(sel).classList.remove('suggested'); $(sel).closest('label').classList.remove('from-photo'); }));
   $('#btn-ocr-copy').addEventListener('click', async () => {
     try { await navigator.clipboard.writeText($('#ocr-text').textContent); toast('Copied'); } catch { toast('Could not copy. Long-press the text to select it.'); }
@@ -871,6 +877,11 @@ function bind() {
 
 async function init() {
   state.settings = { ...defaultSettings(), ...((await db.getSettings()) || {}) };
+  if (!state.settings.allowance || !state.settings.allowance.v) {
+    // Older saved settings counted every category; switch to meals and incidentals.
+    state.settings.allowance = { ...defaultSettings().allowance, amount: (state.settings.allowance && state.settings.allowance.amount) || 165, enabled: state.settings.allowance ? state.settings.allowance.enabled !== false : true };
+    await db.putSettings(state.settings);
+  }
   state.receipts = await db.allReceipts();
   fillCategorySelect();
   bind();
