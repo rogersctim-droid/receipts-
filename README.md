@@ -18,6 +18,7 @@ no account, no server, no subscription.
 | Into Xero | **Export › Download bills CSV** then Xero › Business › Bills to pay › Import. Or **Share photos to Xero bills inbox** to email the photos to Xero, which reads them itself. |
 | Invoice a client | **Export › Download sales invoice CSV** then Xero › Business › Invoices › Import. One draft invoice per client with a line per receipt. |
 | Attach evidence | **Expense claim PDF with photos** gives a one-page summary plus every receipt image, ready to attach to the invoice or an expense claim. |
+| Daily allowance | The Capture screen shows how much of your daily spend (default $165) is left, with a bar that turns amber at 75% and red when over. The receipt form shows what a receipt would leave. Amount and which categories count are in Settings. |
 | Track | Receipts are badged *Not in Xero* / *Xero ✓* and *To claim* / *Claimed ✓* so nothing is exported twice or forgotten. |
 
 ## Install on your phone

@@ -59,7 +59,20 @@ export function defaultSettings(region = 'AU') {
     defaultClient: '',
     invoicePrefix: 'EXP',
     ocr: true,
+    allowance: { enabled: true, amount: 165, categories: CATEGORIES.map((c) => c.key) },
   };
+}
+
+// Daily allowance: how much of today's budget is left, counting receipts dated `dateIso`
+// in the chosen categories. `excludeId` leaves out a receipt being edited so its new
+// total can be previewed.
+export function allowanceStatus(receipts, settings, dateIso, { excludeId = null, extra = 0 } = {}) {
+  const a = settings.allowance || {};
+  const amount = Number(a.amount) || 0;
+  const cats = new Set(a.categories && a.categories.length ? a.categories : CATEGORIES.map((c) => c.key));
+  const todays = receipts.filter((r) => r.date === dateIso && r.id !== excludeId && cats.has(r.category || 'other'));
+  const spent = round2(todays.reduce((n, r) => n + (Number(r.total) || 0), 0) + (Number(extra) || 0));
+  return { enabled: !!a.enabled && amount > 0, amount, spent, left: round2(amount - spent), count: todays.length, over: spent > amount };
 }
 
 export function categoryLabel(key) {

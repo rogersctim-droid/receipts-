@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   defaultSettings, taxFromGross, formatXeroDate, addDays, csvEscape, toCsv, billsCsv, billsRows, BILLS_HEADER,
   invoiceRows, invoiceCsv, INVOICE_HEADER, claimRows, summarize, filterReceipts, imageFileName, billReference,
+  allowanceStatus,
 } from '../src/export.js';
 
 const settings = defaultSettings('UK');
@@ -110,4 +111,20 @@ test('regional defaults', () => {
   assert.equal(defaultSettings('AU').taxNames.expense, 'GST on Expenses');
   assert.equal(defaultSettings('US').dateFormat, 'MDY');
   assert.equal(defaultSettings('NZ').taxRate, 15);
+});
+
+test('daily allowance countdown', () => {
+  const s = { ...settings, allowance: { enabled: true, amount: 165, categories: ['meals', 'taxi'] } };
+  const today = [
+    { id: 'a', date: '2026-11-11', category: 'meals', total: 23.1 },
+    { id: 'b', date: '2026-11-11', category: 'taxi', total: 40 },
+    { id: 'c', date: '2026-11-11', category: 'accommodation', total: 200 },
+    { id: 'd', date: '2026-11-10', category: 'meals', total: 50 },
+  ];
+  const st = allowanceStatus(today, s, '2026-11-11');
+  assert.deepEqual(st, { enabled: true, amount: 165, spent: 63.1, left: 101.9, count: 2, over: false });
+  const preview = allowanceStatus(today, s, '2026-11-11', { excludeId: 'b', extra: 150 });
+  assert.equal(preview.spent, 173.1);
+  assert.equal(preview.over, true);
+  assert.equal(allowanceStatus(today, { ...s, allowance: { enabled: false, amount: 165 } }, '2026-11-11').enabled, false);
 });

@@ -1,12 +1,12 @@
 import { db } from './db.js';
 import {
   REGIONS, CATEGORIES, PAY_METHODS, defaultSettings, categoryLabel, money, taxFromGross, imageFileName,
-  billsCsv, invoiceCsv, claimCsv, summarize, filterReceipts, formatXeroDate, round2,
+  billsCsv, invoiceCsv, claimCsv, summarize, filterReceipts, formatXeroDate, round2, allowanceStatus,
 } from './export.js';
 import { buildZip } from './zip.js';
 import { readReceipt, ocrSupported, preloadOcr } from './ocr.js';
 
-export const APP_VERSION = '1.2.2';
+export const APP_VERSION = '1.3.0';
 
 const $ = (sel) => document.querySelector(sel);
 const state = {
@@ -157,7 +157,39 @@ function sorted(receipts) {
   return [...receipts].sort((a, b) => (b.date + b.createdAt).localeCompare(a.date + a.createdAt));
 }
 
+function renderAllowance() {
+  const card = $('#allowance-card');
+  const st = allowanceStatus(state.receipts, state.settings, todayIso());
+  card.classList.toggle('hidden', !st.enabled);
+  if (!st.enabled) return;
+  $('#allowance-left').textContent = fmtMoney(Math.max(0, st.left));
+  $('#allowance-sub').textContent = st.over
+    ? `Over by ${fmtMoney(-st.left)} · ${fmtMoney(st.spent)} of ${fmtMoney(st.amount)}`
+    : `${fmtMoney(st.spent)} spent of ${fmtMoney(st.amount)} · ${st.count} receipt${st.count === 1 ? '' : 's'}`;
+  const pct = st.amount ? Math.min(100, (st.spent / st.amount) * 100) : 0;
+  $('#allowance-bar').style.width = `${pct}%`;
+  card.classList.toggle('over', st.over);
+  card.classList.toggle('warn', !st.over && pct >= 75);
+}
+// Under the Total field: what this receipt would leave of today's allowance.
+function renderTotalHint() {
+  const hint = $('#total-hint');
+  const date = $('#f-date').value;
+  const cat = $('#f-category').value;
+  const total = Number($('#f-total').value) || 0;
+  const a = state.settings.allowance || {};
+  const counts = a.enabled && date === todayIso() && (!a.categories || !a.categories.length || a.categories.includes(cat));
+  if (!counts) { hint.classList.add('hidden'); return; }
+  const st = allowanceStatus(state.receipts, state.settings, date, { excludeId: state.currentId, extra: total });
+  hint.classList.remove('hidden');
+  hint.classList.toggle('over', st.over);
+  hint.textContent = st.over
+    ? `Puts you ${fmtMoney(-st.left)} over today's ${fmtMoney(st.amount)} allowance`
+    : `Leaves ${fmtMoney(st.left)} of today's ${fmtMoney(st.amount)} allowance`;
+}
+
 async function renderHome() {
+  renderAllowance();
   const notXero = filterReceipts(state.receipts, { status: 'notXero' });
   const notClaimed = filterReceipts(state.receipts, { status: 'notClaimed' });
   $('#stat-xero').textContent = `${notXero.length} · ${fmtMoney(summarize(notXero).total)}`;
@@ -320,6 +352,7 @@ async function openEdit(id, pending) {
   $('#client-field').classList.toggle('hidden', !$('#f-billable').checked);
   $('#f-tax').disabled = $('#f-notax').checked;
   $('#btn-delete').classList.toggle('hidden', !r);
+  renderTotalHint();
   $('#edit-status').textContent = r
     ? [r.exportedXero ? `In Xero since ${fmtDate(r.exportedXero.slice(0, 10))}` : 'Not yet exported to Xero',
       r.billable ? (r.exportedClaim ? `Claimed ${fmtDate(r.exportedClaim.slice(0, 10))}` : 'Not yet claimed') : null]
@@ -419,6 +452,7 @@ async function runOcr(blob) {
     const words = (text || '').trim().split(/\s+/).filter(Boolean).length;
     $('#ocr-text').textContent = `${Math.round(confidence || 0)}% confidence, ${words} words\n\n${(text || '').trim() || '(no text found)'}`;
     $('#ocr-debug').classList.toggle('hidden', !(state.settings.showOcrText || !found.length));
+    renderTotalHint();
     if (found.length) setOcrStatus(`Read from photo: ${found.join(', ')}. Tap the photo to zoom and check.`, 'ok');
     else if (words < 5) setOcrStatus('Could not make out any text. Try again with the receipt flat, filling the frame, in good light.', 'warn');
     else setOcrStatus('Read the text but could not find a total or date in it. Please enter the details.', 'warn');
@@ -467,7 +501,9 @@ async function saveEdit(e) {
   state.pendingImage = null;
   state.openSnapshot = formSnapshot();
   if (state.settings.lastCategory !== r.category) { state.settings.lastCategory = r.category; db.putSettings(state.settings).catch(() => {}); }
-  toast('Saved');
+  const st = allowanceStatus(state.receipts, state.settings, todayIso());
+  if (st.enabled && r.date === todayIso()) toast(st.over ? `Saved · ${fmtMoney(-st.left)} over today's allowance` : `Saved · ${fmtMoney(st.left)} left today`, 3500);
+  else toast('Saved');
   showView(state.previousView);
 }
 async function deleteCurrent() {
@@ -664,6 +700,11 @@ function renderSettings() {
   $('#s-name').value = s.yourName || '';
   $('#s-client').value = s.defaultClient || '';
   $('#s-xeroemail').value = s.xeroEmail || '';
+  const al = s.allowance || defaultSettings().allowance;
+  $('#s-allow-on').checked = !!al.enabled;
+  $('#s-allow-amount').value = al.amount;
+  const cats = new Set(al.categories && al.categories.length ? al.categories : CATEGORIES.map((c) => c.key));
+  $('#s-allow-cats').innerHTML = CATEGORIES.map((c) => `<label class="check"><input type="checkbox" data-cat="${c.key}" ${cats.has(c.key) ? 'checked' : ''} /> ${c.label}</label>`).join('');
   $('#s-ocr').checked = s.ocr !== false;
   $('#s-ocrtext').checked = !!s.showOcrText;
   $('#s-version').textContent = `Receipts v${APP_VERSION} · ${state.receipts.length} receipts stored on this device`;
@@ -705,6 +746,11 @@ async function saveSettings(e) {
     xeroEmail: $('#s-xeroemail').value.trim(),
     ocr: $('#s-ocr').checked,
     showOcrText: $('#s-ocrtext').checked,
+    allowance: {
+      enabled: $('#s-allow-on').checked,
+      amount: round2($('#s-allow-amount').value),
+      categories: [...document.querySelectorAll('#s-allow-cats input:checked')].map((i) => i.dataset.cat),
+    },
   };
   await db.putSettings(state.settings);
   toast('Settings saved');
@@ -780,6 +826,8 @@ function bind() {
   $('#edit-form').addEventListener('submit', saveEdit);
   $('#btn-delete').addEventListener('click', deleteCurrent);
   $('#f-total').addEventListener('input', recomputeTax);
+  ['#f-total', '#f-date', '#f-category'].forEach((sel) => $(sel).addEventListener('input', renderTotalHint));
+  $('#f-category').addEventListener('change', renderTotalHint);
   OCR_FIELDS.forEach((sel) => $(sel).addEventListener('input', () => { $(sel).classList.remove('suggested'); $(sel).closest('label').classList.remove('from-photo'); }));
   $('#btn-ocr-copy').addEventListener('click', async () => {
     try { await navigator.clipboard.writeText($('#ocr-text').textContent); toast('Copied'); } catch { toast('Could not copy. Long-press the text to select it.'); }

@@ -34,6 +34,17 @@
 
     <!-- Capture / home -->
     <section id="view-capture" class="view">
+      <div id="allowance-card" class="card allowance hidden">
+        <div class="allowance-top">
+          <div>
+            <div class="stat-label">Left to spend today</div>
+            <div class="allowance-left" id="allowance-left">$0.00</div>
+          </div>
+          <div class="allowance-sub" id="allowance-sub"></div>
+        </div>
+        <div class="bar"><div class="bar-fill" id="allowance-bar"></div></div>
+      </div>
+
       <div class="capture-actions">
         <label class="big-btn primary" for="file-camera">
           <svg class="ico"><use href="#i-camera"/></svg>
@@ -82,6 +93,7 @@
         <label>Total (incl. GST)
           <input id="f-total" type="number" inputmode="decimal" step="0.01" min="0" required placeholder="0.00" />
         </label>
+        <div id="total-hint" class="status-line hidden"></div>
         <label>Merchant
           <input id="f-merchant" type="text" placeholder="e.g. Uber, Coles, Qantas" list="merchant-list" required />
           <datalist id="merchant-list"></datalist>
@@ -206,6 +218,12 @@
           <input id="s-xeroemail" type="email" placeholder="yourorg-xxxx@xerofiles.com" />
           <small class="muted">In Xero: Business › Bills to pay › “Email bills to Xero” (or Files › Inbox).</small>
         </label>
+
+        <h2>Daily allowance</h2>
+        <label class="check"><input id="s-allow-on" type="checkbox" /> Show how much I have left to spend each day</label>
+        <label>Amount per day <input id="s-allow-amount" type="number" inputmode="decimal" step="0.01" min="0" /></label>
+        <div class="muted small" style="margin-top:10px">Categories that count towards it</div>
+        <div id="s-allow-cats" class="cat-checks"></div>
 
         <h2>Region & tax</h2>
         <label>Region (sets Xero tax names)
