@@ -37,10 +37,13 @@ share sheet. Choose Mail and paste the address.
 
 ## Xero import notes
 
-- **Bills CSV**: amounts are tax inclusive. When Xero asks, choose **Tax Inclusive**. Each receipt
-  becomes a draft bill with the merchant as the contact, the receipt date as bill and due date,
-  and a reference like `RCPT-20261103-DEF456`. Attach the photo from the ZIP export if you want
-  it on the bill (file names match: `2026-11-03_uber_24.00.jpg`).
+- **Bills CSV**: amounts are tax inclusive. When Xero asks, choose **Tax Inclusive**. By default
+  the export is one draft bill payable to you (your name from Settings is the contact), numbered
+  like `Expenses 9-12 Nov`, with a line per receipt reading `Meal, 9 Nov, Bowlito`. Total, tax
+  amount, tracking and currency columns are left blank so Xero fills them in and nothing in the
+  file can refer to a tracking category or currency your organisation does not have. Settings
+  › Xero bills import can switch to one bill per receipt payable to the merchant. Attach photos
+  from the ZIP export if you want them on the bill (file names match: `2026-11-03_uber_24.00.jpg`).
 - **Sales invoice CSV**: creates draft invoices, one per client, dated today, due in the number of
   days set in Settings. Each line reads `03/11/2026 - Taxi / rideshare - Uber - Airport run`.
   Review before approving.

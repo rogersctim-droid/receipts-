@@ -190,7 +190,7 @@
 
       <h2>Into Xero</h2>
       <div class="export-group">
-        <button class="btn" id="x-bills" type="button">Bills CSV<small>Xero › Business › Bills to pay › Import</small></button>
+        <button class="btn" id="x-bills" type="button">Bills CSV<small>Xero › Business › Bills to pay › Import, choose “Tax Inclusive”</small></button>
         <button class="btn" id="x-images" type="button">Receipt photos (ZIP)<small>Attach to bills, or keep as records</small></button>
         <button class="btn" id="x-share" type="button">Send photos to Xero bills inbox<small>Opens the share sheet; Xero reads the receipts</small></button>
       </div>
@@ -239,6 +239,19 @@
         <label class="check"><input id="s-ocr" type="checkbox" /> Read total, date, merchant and GST from photos</label>
         <label class="check"><input id="s-ocrtext" type="checkbox" /> Always show the text read from each photo</label>
         <p class="muted small">Runs entirely on your phone; nothing is uploaded. The text panel appears automatically when a receipt cannot be read.</p>
+
+        <details class="advanced">
+          <summary><h2>Xero bills import</h2></summary>
+          <label>How bills are created
+            <select id="s-billsmode">
+              <option value="claim">One bill payable to me, a line per receipt (expense claim)</option>
+              <option value="merchant">One bill per receipt, payable to the merchant</option>
+            </select>
+          </label>
+          <label>Bill number prefix <input id="s-billslabel" type="text" placeholder="Expenses" />
+            <small class="muted">Becomes e.g. “Expenses 9-12 Nov”. Your name under “You” is the bill’s contact.</small>
+          </label>
+        </details>
 
         <details class="advanced">
           <summary><h2>Invoicing clients</h2></summary>

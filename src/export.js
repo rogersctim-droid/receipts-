@@ -58,6 +58,10 @@ export function defaultSettings(region = 'AU') {
     yourName: '',
     defaultClient: '',
     invoicePrefix: 'EXP',
+    // Bills import: 'claim' = one bill per export payable to you (expense claim style),
+    // 'merchant' = one bill per receipt payable to the merchant.
+    billsMode: 'claim',
+    billsLabel: 'Expenses',
     ocr: true,
     // Meals and incidentals: coffee, food, local taxis. Flights, airport transfers and hotels
     // belong in Travel / Accommodation, which do not count. A single receipt can also be
@@ -145,6 +149,34 @@ function describe(r) {
   return parts.join(' - ');
 }
 
+const SHORT_NOUN = { meals: 'Meal', taxi: 'Taxi', travel: 'Travel', accommodation: 'Accommodation', services: 'Service', supplies: 'Supplies', other: 'Expense' };
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+export function shortDate(isoDate, withYear = false) {
+  if (!isoDate) return '';
+  const [y, m, d] = isoDate.split('-').map(Number);
+  return `${d} ${MONTHS_SHORT[m - 1]}${withYear ? ` ${y}` : ''}`;
+}
+
+// "9-12 Nov", "28 Oct-2 Nov", "9 Nov" or "30 Dec 2025-2 Jan 2026".
+export function dateRangeLabel(receipts) {
+  const dates = receipts.map((r) => r.date).filter(Boolean).sort();
+  if (!dates.length) return '';
+  const a = dates[0]; const b = dates[dates.length - 1];
+  if (a === b) return shortDate(a);
+  const [ay, am, ad] = a.split('-'); const [by, bm] = b.split('-');
+  if (ay !== by) return `${shortDate(a, true)}-${shortDate(b, true)}`;
+  if (am === bm) return `${Number(ad)}-${shortDate(b)}`;
+  return `${shortDate(a)}-${shortDate(b)}`;
+}
+
+// "Meal, 9 Nov, Bowlito" (+ notes)
+export function lineDescription(r) {
+  const parts = [SHORT_NOUN[r.category] || 'Expense', shortDate(r.date), r.merchant || 'Unknown merchant'];
+  if (r.notes) parts.push(r.notes);
+  return parts.join(', ');
+}
+
 export function billReference(r) {
   return `RCPT-${(r.date || '').replace(/-/g, '')}-${String(r.id || '').slice(-6).toUpperCase()}`;
 }
@@ -158,27 +190,47 @@ export const BILLS_HEADER = [
   'TrackingName1', 'TrackingOption1', 'TrackingName2', 'TrackingOption2', 'Currency',
 ];
 
-export function billsRows(receipts, settings) {
+// Only the columns Xero needs are filled. Total, TaxAmount, tracking and currency are left
+// blank: Xero derives them, and a tracking category or currency that does not exist in the
+// organisation makes the whole import fail.
+export function billsRows(receipts, settings, opts = {}) {
+  const account = (r) => settings.accountCodes[r.category] || settings.accountCodes.other || '429';
+  if (settings.billsMode === 'merchant') {
+    return receipts.map((r) => [
+      r.merchant || 'Unknown merchant', '', '', '', '', '', '', '', '', '',
+      billReference(r),
+      formatXeroDate(r.date, settings.dateFormat),
+      formatXeroDate(r.date, settings.dateFormat),
+      '', '',
+      lineDescription(r),
+      '1',
+      money(r.total),
+      account(r),
+      expenseTaxType(r, settings),
+      '', '', '', '', '', '',
+    ]);
+  }
+  // Expense claim style: one bill payable to you, one line per receipt.
+  const date = opts.date || new Date().toISOString().slice(0, 10);
+  const contact = (settings.yourName || '').trim() || 'Expense claim';
+  const number = `${(settings.billsLabel || 'Expenses').trim()} ${dateRangeLabel(receipts)}`.trim();
   return receipts.map((r) => [
-    r.merchant || 'Unknown merchant', '', '', '', '', '', '', '', '', '',
-    billReference(r),
-    formatXeroDate(r.date, settings.dateFormat),
-    formatXeroDate(r.date, settings.dateFormat),
-    money(r.total),
-    '',
-    describe(r),
+    contact, '', '', '', '', '', '', '', '', '',
+    number,
+    formatXeroDate(date, settings.dateFormat),
+    formatXeroDate(date, settings.dateFormat),
+    '', '',
+    lineDescription(r),
     '1',
     money(r.total),
-    settings.accountCodes[r.category] || settings.accountCodes.other || '429',
+    account(r),
     expenseTaxType(r, settings),
-    money(r.noTax ? 0 : r.tax),
-    r.client ? 'Client' : '', r.client || '', '', '',
-    r.currency || settings.currency,
+    '', '', '', '', '', '',
   ]);
 }
 
-export function billsCsv(receipts, settings) {
-  return toCsv([BILLS_HEADER, ...billsRows(receipts, settings)]);
+export function billsCsv(receipts, settings, opts) {
+  return toCsv([BILLS_HEADER, ...billsRows(receipts, settings, opts)]);
 }
 
 // Xero > Business > Invoices > Import. Header matches Xero's sales invoice import template.
@@ -227,7 +279,7 @@ export function invoiceRows(receipts, settings, opts = {}) {
         settings.incomeAccount || '200',
         taxType,
         '', '', '', '',
-        r.currency || settings.currency,
+        '',
         '',
       ]);
     }

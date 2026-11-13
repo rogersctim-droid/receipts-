@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   defaultSettings, taxFromGross, formatXeroDate, addDays, csvEscape, toCsv, billsCsv, billsRows, BILLS_HEADER,
   invoiceRows, invoiceCsv, INVOICE_HEADER, claimRows, summarize, filterReceipts, imageFileName, billReference,
-  allowanceStatus,
+  allowanceStatus, dateRangeLabel,
 } from '../src/export.js';
 
 const settings = defaultSettings('UK');
@@ -29,26 +29,49 @@ test('csv escaping', () => {
   assert.equal(toCsv([['a', 'b'], ['1', 'x,y']]), 'a,b\r\n1,"x,y"\r\n');
 });
 
-test('bills CSV matches Xero template shape', () => {
-  const rows = billsRows([taxi, lunch], settings);
+test('bills CSV: expense-claim style, one bill payable to you', () => {
+  const s = { ...settings, yourName: 'Tim Rogers', billsLabel: 'EA meals' };
+  const rows = billsRows([lunch, taxi], s, { date: '2026-11-12' });
   assert.equal(rows.length, 2);
   for (const r of rows) assert.equal(r.length, BILLS_HEADER.length);
-  const row = Object.fromEntries(BILLS_HEADER.map((h, i) => [h, rows[0][i]]));
-  assert.equal(row['*ContactName'], 'Uber');
-  assert.equal(row['*InvoiceDate'], '03/11/2026');
+  const row = Object.fromEntries(BILLS_HEADER.map((h, i) => [h, rows[1][i]]));
+  assert.equal(row['*ContactName'], 'Tim Rogers');
+  assert.equal(row['*InvoiceNumber'], 'EA meals 1-3 Nov');
+  assert.equal(row['*InvoiceDate'], '12/11/2026');
+  assert.equal(row['*DueDate'], '12/11/2026');
+  assert.equal(row.Total, '');
+  assert.equal(row.Description, 'Taxi, 3 Nov, Uber, Airport');
+  assert.equal(row['*Quantity'], '1');
   assert.equal(row['*UnitAmount'], '24.00');
   assert.equal(row['*AccountCode'], '493');
   assert.equal(row['*TaxType'], '20% (VAT on Expenses)');
-  assert.equal(row.TaxAmount, '4.00');
-  assert.equal(row.TrackingOption1, 'Acme Ltd');
-  assert.equal(row.Currency, 'GBP');
-  const noTax = Object.fromEntries(BILLS_HEADER.map((h, i) => [h, rows[1][i]]));
+  assert.equal(row.TaxAmount, '');
+  assert.equal(row.TrackingName1, '');
+  assert.equal(row.Currency, '');
+  const noTax = Object.fromEntries(BILLS_HEADER.map((h, i) => [h, rows[0][i]]));
   assert.equal(noTax['*TaxType'], 'No VAT');
-  assert.equal(noTax.TaxAmount, '0.00');
-  assert.equal(noTax['*AccountCode'], '420');
-  const csv = billsCsv([lunch], settings);
+  assert.equal(noTax.Description, 'Meal, 1 Nov, Pret, "The Strand"');
+  const csv = billsCsv([lunch], s);
   assert.ok(csv.startsWith('*ContactName,EmailAddress'));
-  assert.ok(csv.includes('"Pret, ""The Strand"""'));
+  assert.ok(csv.includes('"Meal, 1 Nov, Pret, ""The Strand"""'));
+});
+
+test('bills CSV: one bill per merchant when configured', () => {
+  const rows = billsRows([taxi], { ...settings, billsMode: 'merchant' });
+  const row = Object.fromEntries(BILLS_HEADER.map((h, i) => [h, rows[0][i]]));
+  assert.equal(row['*ContactName'], 'Uber');
+  assert.equal(row['*InvoiceNumber'], 'RCPT-20261103-DEF456');
+  assert.equal(row['*InvoiceDate'], '03/11/2026');
+  assert.equal(row.Total, '');
+  assert.equal(row.Currency, '');
+});
+
+test('date range labels', () => {
+  const d = (date) => ({ date });
+  assert.equal(dateRangeLabel([d('2026-11-09'), d('2026-11-12'), d('2026-11-10')]), '9-12 Nov');
+  assert.equal(dateRangeLabel([d('2026-10-28'), d('2026-11-02')]), '28 Oct-2 Nov');
+  assert.equal(dateRangeLabel([d('2026-11-09')]), '9 Nov');
+  assert.equal(dateRangeLabel([d('2025-12-30'), d('2026-01-02')]), '30 Dec 2025-2 Jan 2026');
 });
 
 test('bill reference is stable and readable', () => {
@@ -67,6 +90,7 @@ test('sales invoice CSV groups by client', () => {
   assert.equal(acme['*UnitAmount'], '24.00');
   assert.equal(acme['*AccountCode'], '200');
   assert.equal(acme['*TaxType'], '20% (VAT on Income)');
+  assert.equal(acme.Currency, '');
   assert.match(acme['*Description'], /^03\/11\/2026 - Taxi \/ rideshare - Uber - Airport$/);
   const numbers = new Set(rows.map((r) => r[10]));
   assert.equal(numbers.size, 3, 'one invoice number per client');

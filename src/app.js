@@ -6,7 +6,7 @@ import {
 import { buildZip } from './zip.js';
 import { readReceipt, ocrSupported, preloadOcr } from './ocr.js';
 
-export const APP_VERSION = '1.3.1';
+export const APP_VERSION = '1.4.0';
 
 const $ = (sel) => document.querySelector(sel);
 const state = {
@@ -599,7 +599,11 @@ async function markExported(kind, rs) {
 
 async function exportBills() {
   const rs = requireSelection(); if (!rs.length) return;
-  const how = await deliver(csvBlob(billsCsv(rs, state.settings)), `xero-bills-${stamp()}.csv`, 'Xero bills import');
+  if (state.settings.billsMode !== 'merchant' && !state.settings.yourName) {
+    toast('Add your name in Settings first: it becomes the contact on the bill.', 4500);
+    return;
+  }
+  const how = await deliver(csvBlob(billsCsv(rs, state.settings, { date: todayIso() })), `xero-bills-${stamp()}.csv`, 'Xero bills import');
   if (how === 'cancelled') return;
   toast('In Xero choose “Tax Inclusive” when importing.', 5000);
   offerMark('xero', rs, `Bills CSV ${how}`);
@@ -693,6 +697,8 @@ function renderSettings() {
   $('#s-taxrate').value = s.taxRate;
   $('#s-datefmt').value = s.dateFormat;
   $('#s-accounts').innerHTML = CATEGORIES.map((c) => `<label>${c.label} <input type="text" data-acct="${c.key}" value="${escapeHtml(s.accountCodes[c.key] || c.account)}" /></label>`).join('');
+  $('#s-billsmode').value = s.billsMode || 'claim';
+  $('#s-billslabel').value = s.billsLabel || '';
   $('#s-income').value = s.incomeAccount;
   $('#s-rechargetax').value = s.rechargeTax;
   $('#s-prefix').value = s.invoicePrefix;
@@ -738,6 +744,8 @@ async function saveSettings(e) {
     taxRate: Number($('#s-taxrate').value) || 0,
     dateFormat: $('#s-datefmt').value,
     accountCodes,
+    billsMode: $('#s-billsmode').value,
+    billsLabel: $('#s-billslabel').value.trim() || 'Expenses',
     incomeAccount: $('#s-income').value.trim() || '200',
     rechargeTax: $('#s-rechargetax').value,
     invoicePrefix: $('#s-prefix').value.trim() || 'EXP',
