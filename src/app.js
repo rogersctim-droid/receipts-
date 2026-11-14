@@ -7,7 +7,7 @@ import {
 import { buildZip } from './zip.js';
 import { readReceipt, ocrSupported, preloadOcr } from './ocr.js';
 
-export const APP_VERSION = '1.6.3';
+export const APP_VERSION = '1.7.0';
 
 const $ = (sel) => document.querySelector(sel);
 const state = {
@@ -16,6 +16,7 @@ const state = {
   currentId: null,
   pendingImage: null, // { full: Blob, thumb: Blob } for a receipt not yet saved
   taxTouched: false,
+  billableTouched: false,
   initialValues: null, // field values when the form opened; OCR only fills fields still at these values
   openSnapshot: null, // every field as it was when the form opened, for the unsaved-changes check
   ocrToken: 0,
@@ -172,6 +173,14 @@ function renderAllowance() {
   card.classList.toggle('over', st.over);
   card.classList.toggle('warn', !st.over && pct >= 75);
 }
+// New receipts: a taxi is not billable unless it is an airport transfer; other categories use the default.
+function applyCategoryDefaults() {
+  if (state.currentId || state.billableTouched) return;
+  const taxi = $('#f-category').value === 'taxi';
+  $('#f-billable').checked = taxi ? $('#f-airport').checked : state.settings.defaultBillable !== false;
+  $('#client-field').classList.toggle('hidden', !$('#f-billable').checked);
+}
+
 // Under the Total field: what this receipt would leave of today's allowance.
 function renderTotalHint() {
   const hint = $('#total-hint');
@@ -180,8 +189,10 @@ function renderTotalHint() {
   const total = Number($('#f-total').value) || 0;
   const a = state.settings.allowance || {};
   const inCategory = a.enabled && (!a.categories || !a.categories.length || a.categories.includes(cat));
-  $('#exempt-field').classList.toggle('hidden', !inCategory);
-  const counts = inCategory && date === todayIso() && !$('#f-exempt').checked;
+  const isTaxi = cat === 'taxi';
+  $('#airport-field').classList.toggle('hidden', !isTaxi);
+  $('#exempt-field').classList.toggle('hidden', !inCategory || isTaxi);
+  const counts = inCategory && date === todayIso() && !$('#f-exempt').checked && !(isTaxi && $('#f-airport').checked);
   if (!counts) { hint.classList.add('hidden'); return; }
   const st = allowanceStatus(state.receipts, state.settings, date, { excludeId: state.currentId, extra: total });
   hint.classList.remove('hidden');
@@ -376,7 +387,11 @@ async function openEdit(id, pending) {
   $('#f-paid').value = r && payMethods().some((m) => m.key === r.paidWith) ? r.paidWith : defaultPaid;
   $('#f-taxinv').checked = r ? !!r.taxInvoice : false;
   $('#f-exempt').checked = r ? !!r.allowanceExempt : false;
-  $('#f-billable').checked = r ? !!r.billable : s.defaultBillable !== false;
+  $('#f-airport').checked = r ? !!r.airport : false;
+  // Taxis are a plain business expense unless they are an airport transfer; everything else
+  // follows the default. Changed by exception on the form.
+  $('#f-billable').checked = r ? !!r.billable : (s.defaultBillable !== false && $('#f-category').value !== 'taxi');
+  state.billableTouched = false;
   $('#f-client').value = r ? r.client || '' : s.defaultClient || '';
   $('#f-notes').value = r ? r.notes || '' : '';
   $('#client-field').classList.toggle('hidden', !$('#f-billable').checked);
@@ -416,7 +431,7 @@ function markFromPhoto(sel) {
 }
 const ALL_FIELDS = ['#f-total', '#f-merchant', '#f-date', '#f-category', '#f-tax', '#f-paid', '#f-client', '#f-notes'];
 function formSnapshot() {
-  return JSON.stringify([...ALL_FIELDS.map((sel) => $(sel).value), $('#f-notax').checked, $('#f-billable').checked, $('#f-exempt').checked, $('#f-taxinv').checked]);
+  return JSON.stringify([...ALL_FIELDS.map((sel) => $(sel).value), $('#f-notax').checked, $('#f-billable').checked, $('#f-exempt').checked, $('#f-taxinv').checked, $('#f-airport').checked]);
 }
 function editIsDirty() {
   return state.view === 'edit' && (!!state.pendingImage || formSnapshot() !== state.openSnapshot);
@@ -479,7 +494,7 @@ async function runOcr(blob) {
     }
     if (parsed.merchant && untouched('#f-merchant')) { $('#f-merchant').value = parsed.merchant; markFromPhoto('#f-merchant'); found.push('merchant'); }
     if (parsed.date && untouched('#f-date')) { $('#f-date').value = parsed.date; markFromPhoto('#f-date'); found.push('date'); }
-    if (parsed.category && untouched('#f-category')) { $('#f-category').value = parsed.category; markFromPhoto('#f-category'); found.push('category'); }
+    if (parsed.category && untouched('#f-category')) { $('#f-category').value = parsed.category; markFromPhoto('#f-category'); found.push('category'); applyCategoryDefaults(); }
     if (parsed.taxInvoice && !$('#f-taxinv').checked) { $('#f-taxinv').checked = true; $('#f-taxinv').closest('label').classList.add('from-photo'); found.push('tax invoice'); }
     const words = (text || '').trim().split(/\s+/).filter(Boolean).length;
     $('#ocr-text').textContent = `${Math.round(confidence || 0)}% confidence, ${words} words\n\n${(text || '').trim() || '(no text found)'}`;
@@ -518,7 +533,8 @@ async function saveEdit(e) {
     paidWith: $('#f-paid').value,
     taxInvoice: $('#f-taxinv').checked,
     billable,
-    allowanceExempt: $('#f-exempt').checked,
+    allowanceExempt: $('#f-exempt').checked || $('#f-airport').checked,
+    airport: $('#f-airport').checked,
     client: billable ? $('#f-client').value.trim() : '',
     notes: $('#f-notes').value.trim(),
     currency: state.settings.currency,
@@ -976,8 +992,18 @@ function bind() {
   $('#btn-delete').addEventListener('click', deleteCurrent);
   $('#f-total').addEventListener('input', recomputeTax);
   ['#f-total', '#f-date', '#f-category'].forEach((sel) => $(sel).addEventListener('input', renderTotalHint));
-  $('#f-category').addEventListener('change', renderTotalHint);
+  $('#f-category').addEventListener('change', () => { applyCategoryDefaults(); renderTotalHint(); });
   $('#f-exempt').addEventListener('change', renderTotalHint);
+  $('#f-airport').addEventListener('change', (e) => {
+    if (e.target.checked) {
+      $('#f-billable').checked = true;
+      if (!$('#f-client').value.trim()) $('#f-client').value = state.settings.defaultClient || '';
+    } else if (!state.billableTouched) {
+      $('#f-billable').checked = false;
+    }
+    $('#client-field').classList.toggle('hidden', !$('#f-billable').checked);
+    renderTotalHint();
+  });
   OCR_FIELDS.forEach((sel) => $(sel).addEventListener('input', () => { $(sel).classList.remove('suggested'); $(sel).closest('label').classList.remove('from-photo'); }));
   $('#btn-ocr-copy').addEventListener('click', async () => {
     try { await navigator.clipboard.writeText($('#ocr-text').textContent); toast('Copied'); } catch { toast('Could not copy. Long-press the text to select it.'); }
@@ -997,7 +1023,7 @@ function bind() {
     $('#f-tax').disabled = e.target.checked;
     if (e.target.checked) $('#f-tax').value = '0.00'; else { state.taxTouched = false; recomputeTax(); }
   });
-  $('#f-billable').addEventListener('change', (e) => $('#client-field').classList.toggle('hidden', !e.target.checked));
+  $('#f-billable').addEventListener('change', (e) => { state.billableTouched = true; $('#client-field').classList.toggle('hidden', !e.target.checked); });
 
   ['#l-status', '#l-client', '#l-month'].forEach((sel) => $(sel).addEventListener('change', renderList));
   ['#e-status', '#e-client', '#e-from', '#e-to'].forEach((sel) => $(sel).addEventListener('change', renderExport));

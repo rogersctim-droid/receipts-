@@ -192,6 +192,7 @@ export function lineDescription(r) {
   const noun = r.category === 'taxi' && /uber/i.test(merchant) ? 'Uber' : (SHORT_NOUN[r.category] || 'Expense');
   const parts = [noun, shortDate(r.date)];
   if (merchant.trim().toLowerCase() !== noun.toLowerCase()) parts.push(merchant); // "Uber, 3 Nov" not "Uber, 3 Nov, Uber"
+  if (r.airport) parts.push('airport transfer');
   if (r.notes) parts.push(r.notes);
   return parts.join(', ');
 }

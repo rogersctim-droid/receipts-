@@ -70,6 +70,8 @@ test('taxi descriptions: Uber by name, other taxis by merchant', () => {
   const cab = { ...taxi, merchant: '13cabs', notes: '' };
   const [row] = billsRows([cab], { ...settings, billsMode: 'merchant' });
   assert.equal(row[BILLS_HEADER.indexOf('Description')], 'Taxi, 3 Nov, 13cabs');
+  const [airport] = billsRows([{ ...cab, airport: true }], { ...settings, billsMode: 'merchant' });
+  assert.equal(airport[BILLS_HEADER.indexOf('Description')], 'Taxi, 3 Nov, 13cabs, airport transfer');
 });
 
 test('date range labels', () => {

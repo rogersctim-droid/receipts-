@@ -47,8 +47,9 @@ email also stays out.
 ## New receipt defaults
 
 Every new receipt starts as paid with the company card (Westpac), billable to the default
-client, in the last category you used. Change the ones that are different by exception; the
-"Not part of my daily allowance" switch covers airport taxis. Defaults are under Settings ›
+client, in the last category you used. Taxis are the exception: a taxi is a plain business
+expense, not billable, unless you tick **Airport transfer**, which bills it to the client and
+keeps it out of the daily allowance. Change anything else by exception on the form. Defaults are under Settings ›
 New receipt defaults.
 
 ## Weekly export columns
