@@ -66,6 +66,12 @@ test('bills CSV: one bill per merchant when configured', () => {
   assert.equal(row.Currency, '');
 });
 
+test('taxi descriptions: Uber by name, other taxis by merchant', () => {
+  const cab = { ...taxi, merchant: '13cabs', notes: '' };
+  const [row] = billsRows([cab], { ...settings, billsMode: 'merchant' });
+  assert.equal(row[BILLS_HEADER.indexOf('Description')], 'Taxi, 3 Nov, 13cabs');
+});
+
 test('date range labels', () => {
   const d = (date) => ({ date });
   assert.equal(dateRangeLabel([d('2026-11-09'), d('2026-11-12'), d('2026-11-10')]), '9-12 Nov');
@@ -91,7 +97,7 @@ test('sales invoice CSV groups by client', () => {
   assert.equal(acme['*AccountCode'], '200');
   assert.equal(acme['*TaxType'], '20% (VAT on Income)');
   assert.equal(acme.Currency, '');
-  assert.match(acme['*Description'], /^03\/11\/2026 - Uber - Uber - Airport$/);
+  assert.match(acme['*Description'], /^03\/11\/2026 - Taxi \/ Uber - Uber - Airport$/);
   const numbers = new Set(rows.map((r) => r[10]));
   assert.equal(numbers.size, 3, 'one invoice number per client');
   assert.ok(invoiceCsv([taxi], settings).startsWith(INVOICE_HEADER.join(',')));
