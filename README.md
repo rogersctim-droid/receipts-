@@ -37,6 +37,13 @@ In Xero go to Business › Bills to pay and click the **Email bills to Xero** li
 **Share photos to Xero bills inbox** the app copies that address to your clipboard and opens the
 share sheet. Choose Mail and paste the address.
 
+## What goes through the app
+
+Paper and card receipts only: meals, coffee, parking, ad hoc taxis, small purchases. Uber rides
+are booked on the Uber business profile, which emails their tax invoices to the bookkeeping
+inbox itself, so they are not entered here. Flights, hotels and anything else that arrives by
+email also stays out.
+
 ## New receipt defaults
 
 Every new receipt starts as paid with the company card (Westpac), billable to the default

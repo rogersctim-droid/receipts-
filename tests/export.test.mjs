@@ -97,7 +97,7 @@ test('sales invoice CSV groups by client', () => {
   assert.equal(acme['*AccountCode'], '200');
   assert.equal(acme['*TaxType'], '20% (VAT on Income)');
   assert.equal(acme.Currency, '');
-  assert.match(acme['*Description'], /^03\/11\/2026 - Taxi \/ Uber - Uber - Airport$/);
+  assert.match(acme['*Description'], /^03\/11\/2026 - Taxi - Uber - Airport$/);
   const numbers = new Set(rows.map((r) => r[10]));
   assert.equal(numbers.size, 3, 'one invoice number per client');
   assert.ok(invoiceCsv([taxi], settings).startsWith(INVOICE_HEADER.join(',')));

@@ -26,7 +26,7 @@ export const REGIONS = {
 // Default Xero chart-of-accounts codes (Xero's standard chart). All editable in Settings.
 export const CATEGORIES = [
   { key: 'meals', label: 'Meals & drinks', account: '420' },
-  { key: 'taxi', label: 'Taxi / Uber', account: '493' },
+  { key: 'taxi', label: 'Taxi', account: '493' },
   { key: 'parking', label: 'Parking', account: '493' },
   { key: 'travel', label: 'Travel (train, flights)', account: '493' },
   { key: 'accommodation', label: 'Accommodation', account: '493' },

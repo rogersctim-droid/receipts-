@@ -1,5 +1,5 @@
 // Offline support: cache the app shell, network-first so updates arrive quickly.
-const CACHE = 'receipts-v1.6.2';
+const CACHE = 'receipts-v1.6.3';
 const OCR_CACHE = 'receipts-ocr-v1'; // big, rarely-changing OCR engine files
 const SHELL = [
   './', './index.html', './styles.css', './manifest.webmanifest',
