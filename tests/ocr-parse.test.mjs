@@ -64,6 +64,7 @@ test('cafe receipt with subtotal and two-digit year', () => {
   assert.equal(p.tax, 2.91);
   assert.equal(p.date, '2026-11-08');
   assert.equal(p.category, 'meals');
+  assert.equal(p.taxInvoice, true, 'ABN plus "tax invoice" present');
 });
 
 test('hotel invoice with month names', () => {
@@ -108,8 +109,9 @@ test('falls back to the largest amount when no total word is present', () => {
   const p = parseReceiptText('Parking\n2 hours 8.00\nFee 12.00\n', { now });
   assert.equal(p.total, 12);
   assert.equal(p.totalSource, 'largest');
-  assert.equal(p.category, 'travel');
+  assert.equal(p.category, 'parking');
   assert.equal(p.tax, null);
+  assert.equal(p.taxInvoice, false);
 });
 
 test('date formats', () => {

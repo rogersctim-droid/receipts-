@@ -1,12 +1,13 @@
 import { db } from './db.js';
 import {
-  REGIONS, CATEGORIES, PAY_METHODS, defaultSettings, categoryLabel, money, taxFromGross, imageFileName,
+  REGIONS, CATEGORIES, DEFAULT_PAY_METHODS, defaultSettings, categoryLabel, money, taxFromGross, imageFileName,
   billsCsv, invoiceCsv, claimCsv, summarize, filterReceipts, formatXeroDate, round2, allowanceStatus,
+  exportFolderName, monthFolder, payLabel,
 } from './export.js';
 import { buildZip } from './zip.js';
 import { readReceipt, ocrSupported, preloadOcr } from './ocr.js';
 
-export const APP_VERSION = '1.4.0';
+export const APP_VERSION = '1.5.0';
 
 const $ = (sel) => document.querySelector(sel);
 const state = {
@@ -131,7 +132,7 @@ async function receiptItem(r) {
   const url = img ? thumbUrl(r.id, img.thumb) : null;
   const badges = [];
   if (r.client) badges.push(`<span class="badge">${escapeHtml(r.client)}</span>`);
-  if (r.exportedXero) badges.push('<span class="badge ok">Xero ✓</span>');
+  if (r.exportedXero) badges.push('<span class="badge ok">Exported ✓</span>');
   if (r.billable && r.exportedClaim) badges.push('<span class="badge ok">Claimed ✓</span>');
   if (r.paidWith === 'personal') badges.push('<span class="badge">Paid personally</span>');
   li.innerHTML = `
@@ -233,6 +234,13 @@ async function renderList() {
 // ---------- edit form ----------
 function fillCategorySelect() {
   $('#f-category').innerHTML = CATEGORIES.map((c) => `<option value="${c.key}">${c.label}</option>`).join('');
+}
+function payMethods() {
+  const list = state.settings.payMethods;
+  return Array.isArray(list) && list.length ? list : DEFAULT_PAY_METHODS;
+}
+function fillPaySelect() {
+  $('#f-paid').innerHTML = payMethods().map((m) => `<option value="${escapeHtml(m.key)}">${escapeHtml(m.label)}</option>`).join('');
 }
 function fillDatalists() {
   const merchants = [...new Set(state.receipts.map((r) => r.merchant).filter(Boolean))].sort();
@@ -347,7 +355,9 @@ async function openEdit(id, pending) {
   $('#f-category').value = r ? r.category : (s.lastCategory || 'meals');
   $('#f-tax').value = r ? money(r.tax) : '';
   $('#f-notax').checked = r ? !!r.noTax : false;
-  $('#f-paid').value = r ? r.paidWith : 'personal';
+  fillPaySelect();
+  $('#f-paid').value = r && payMethods().some((m) => m.key === r.paidWith) ? r.paidWith : 'personal';
+  $('#f-taxinv').checked = r ? !!r.taxInvoice : false;
   $('#f-exempt').checked = r ? !!r.allowanceExempt : false;
   $('#f-billable').checked = r ? !!r.billable : !!s.defaultClient;
   $('#f-client').value = r ? r.client || '' : s.defaultClient || '';
@@ -357,7 +367,7 @@ async function openEdit(id, pending) {
   $('#btn-delete').classList.toggle('hidden', !r);
   renderTotalHint();
   $('#edit-status').textContent = r
-    ? [r.exportedXero ? `In Xero since ${fmtDate(r.exportedXero.slice(0, 10))}` : 'Not yet exported to Xero',
+    ? [r.exportedXero ? `Exported ${fmtDate(r.exportedXero.slice(0, 10))}` : 'Not yet exported',
       r.billable ? (r.exportedClaim ? `Claimed ${fmtDate(r.exportedClaim.slice(0, 10))}` : 'Not yet claimed') : null]
       .filter(Boolean).join(' · ')
     : '';
@@ -381,6 +391,7 @@ function snapshotFields() {
 }
 function clearSuggested() {
   OCR_FIELDS.forEach((sel) => { $(sel).classList.remove('suggested'); $(sel).closest('label').classList.remove('from-photo'); });
+  $('#f-taxinv').closest('label').classList.remove('from-photo');
 }
 function markFromPhoto(sel) {
   $(sel).classList.add('suggested');
@@ -388,7 +399,7 @@ function markFromPhoto(sel) {
 }
 const ALL_FIELDS = ['#f-total', '#f-merchant', '#f-date', '#f-category', '#f-tax', '#f-paid', '#f-client', '#f-notes'];
 function formSnapshot() {
-  return JSON.stringify([...ALL_FIELDS.map((sel) => $(sel).value), $('#f-notax').checked, $('#f-billable').checked, $('#f-exempt').checked]);
+  return JSON.stringify([...ALL_FIELDS.map((sel) => $(sel).value), $('#f-notax').checked, $('#f-billable').checked, $('#f-exempt').checked, $('#f-taxinv').checked]);
 }
 function editIsDirty() {
   return state.view === 'edit' && (!!state.pendingImage || formSnapshot() !== state.openSnapshot);
@@ -452,6 +463,7 @@ async function runOcr(blob) {
     if (parsed.merchant && untouched('#f-merchant')) { $('#f-merchant').value = parsed.merchant; markFromPhoto('#f-merchant'); found.push('merchant'); }
     if (parsed.date && untouched('#f-date')) { $('#f-date').value = parsed.date; markFromPhoto('#f-date'); found.push('date'); }
     if (parsed.category && untouched('#f-category')) { $('#f-category').value = parsed.category; markFromPhoto('#f-category'); found.push('category'); }
+    if (parsed.taxInvoice && !$('#f-taxinv').checked) { $('#f-taxinv').checked = true; $('#f-taxinv').closest('label').classList.add('from-photo'); found.push('tax invoice'); }
     const words = (text || '').trim().split(/\s+/).filter(Boolean).length;
     $('#ocr-text').textContent = `${Math.round(confidence || 0)}% confidence, ${words} words\n\n${(text || '').trim() || '(no text found)'}`;
     $('#ocr-debug').classList.toggle('hidden', !(state.settings.showOcrText || !found.length));
@@ -487,6 +499,7 @@ async function saveEdit(e) {
     tax: $('#f-notax').checked ? 0 : round2($('#f-tax').value),
     noTax: $('#f-notax').checked,
     paidWith: $('#f-paid').value,
+    taxInvoice: $('#f-taxinv').checked,
     billable,
     allowanceExempt: $('#f-exempt').checked,
     client: billable ? $('#f-client').value.trim() : '',
@@ -556,6 +569,12 @@ function exportSelection() {
 function renderExport() {
   fillClientSelect($('#e-client'));
   clearFollowup();
+  const log = state.settings.exports || [];
+  const last = log[log.length - 1];
+  $('#export-last').textContent = last
+    ? `Last export: ${last.folder} (${last.count} receipt${last.count === 1 ? '' : 's'}, ${fmtDate(last.at.slice(0, 10))}). ${log.length} export${log.length === 1 ? '' : 's'} so far.`
+    : 'No exports yet.';
+  $('#x-weekly-sub').textContent = `${monthFolder(todayIso())} / ${exportFolderName(todayIso(), log.map((e) => e.folder))}`;
   const rs = exportSelection();
   $('#export-summary').innerHTML = summaryHtml(rs);
   document.querySelectorAll('#view-export .btn').forEach((b) => { b.disabled = rs.length === 0; });
@@ -578,8 +597,8 @@ async function imageEntries(rs) {
 function offerMark(kind, rs, what) {
   const n = `${rs.length} receipt${rs.length === 1 ? '' : 's'}`;
   state.followup = { kind, receipts: rs };
-  $('#export-followup-text').textContent = `${what} for ${n}. When it is in Xero, mark ${rs.length === 1 ? 'it' : 'them'} as ${kind === 'xero' ? '“in Xero”' : '“claimed”'} so ${rs.length === 1 ? 'it is' : 'they are'} not exported twice.`;
-  $('#btn-followup-mark').textContent = kind === 'xero' ? 'Mark as in Xero' : 'Mark as claimed';
+  $('#export-followup-text').textContent = `${what} for ${n}. Mark ${rs.length === 1 ? 'it' : 'them'} as ${kind === 'xero' ? 'exported' : 'claimed'} so ${rs.length === 1 ? 'it is' : 'they are'} not included again.`;
+  $('#btn-followup-mark').textContent = kind === 'xero' ? 'Mark as exported' : 'Mark as claimed';
   $('#export-followup').classList.remove('hidden');
   $('#export-followup').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
@@ -593,7 +612,7 @@ async function markExported(kind, rs) {
     if (kind === 'xero') r.exportedXero = now; else r.exportedClaim = now;
     await db.putReceipt(r);
   }
-  toast(`Marked ${rs.length} as ${kind === 'xero' ? 'in Xero' : 'claimed'}`);
+  toast(`Marked ${rs.length} as ${kind === 'xero' ? 'exported' : 'claimed'}`);
   renderExport();
 }
 
@@ -608,6 +627,52 @@ async function exportBills() {
   toast('In Xero choose “Tax Inclusive” when importing.', 5000);
   offerMark('xero', rs, `Bills CSV ${how}`);
 }
+// Weekly export: a dated folder with receipts.csv and one photo per receipt, written into
+// the month folder of the bookkeeping's iCloud drive. Phones get a zip for the share sheet
+// (Save to Files, then tap to unpack); desktop Chrome writes the folder directly.
+async function exportWeekly() {
+  const rs = requireSelection(); if (!rs.length) return;
+  const today = todayIso();
+  const log = state.settings.exports || [];
+  const folder = exportFolderName(today, log.map((e) => e.folder));
+  const month = monthFolder(today);
+  const entries = await imageEntries(rs);
+  const files = [{ name: 'receipts.csv', blob: csvBlob(claimCsv(rs, state.settings)) }, ...entries.map((e) => ({ name: e.name, blob: e.blob }))];
+  let how;
+  const phone = /iPhone|iPad|Android/i.test(navigator.userAgent) || (navigator.canShare && navigator.canShare({ files: [new File([''], 'x.zip')] }));
+  if (window.showDirectoryPicker && !phone && !state.settings.exportAsZip) {
+    try {
+      toast('Choose the “Expenses & Receipts” folder.', 4000);
+      const root = await window.showDirectoryPicker({ mode: 'readwrite' });
+      const m = await root.getDirectoryHandle(month, { create: true });
+      let name = folder; let n = 1;
+      // Belt and braces: never overwrite a folder that already exists on disk.
+      while (await m.getDirectoryHandle(name).then(() => true, () => false)) { n += 1; name = `${folder}-${n}`; }
+      const d = await m.getDirectoryHandle(name, { create: true });
+      for (const f of files) {
+        const fh = await d.getFileHandle(f.name, { create: true });
+        const w = await fh.createWritable();
+        await w.write(f.blob); await w.close();
+      }
+      how = `Folder ${month}/${name} written`;
+    } catch (err) {
+      if (err && err.name === 'AbortError') return;
+      toast(`Could not write the folder (${err.message}). Saving a zip instead.`, 4000);
+    }
+  }
+  if (!how) {
+    const zipEntries = [];
+    for (const f of files) zipEntries.push({ name: `${folder}/${f.name}`, data: new Uint8Array(await f.blob.arrayBuffer()), date: new Date() });
+    const result = await deliver(new Blob([buildZip(zipEntries)], { type: 'application/zip' }), `${folder}.zip`, `Receipts export ${today}`);
+    if (result === 'cancelled') return;
+    how = `${folder}.zip ${result}`;
+  }
+  state.settings.exports = [...log, { folder, month, at: new Date().toISOString(), count: rs.length }].slice(-100);
+  await db.putSettings(state.settings);
+  $('#export-last').textContent = `Last export: ${folder} (${rs.length} receipts, today).`;
+  offerMark('xero', rs, how);
+}
+
 async function exportImagesZip() {
   const rs = requireSelection(); if (!rs.length) return;
   const entries = await imageEntries(rs);
@@ -711,6 +776,7 @@ function renderSettings() {
   $('#s-name').value = s.yourName || '';
   $('#s-client').value = s.defaultClient || '';
   $('#s-xeroemail').value = s.xeroEmail || '';
+  $('#s-paymethods').innerHTML = payMethods().map((m) => `<label>${m.key === 'personal' ? 'Paid personally (reimbursed to you)' : 'Business card'} <input type="text" data-pay="${escapeHtml(m.key)}" value="${escapeHtml(m.label)}" /></label>`).join('');
   const al = s.allowance || defaultSettings().allowance;
   $('#s-allow-on').checked = !!al.enabled;
   $('#s-allow-amount').value = al.amount;
@@ -757,6 +823,7 @@ async function saveSettings(e) {
     yourName: $('#s-name').value.trim(),
     defaultClient: $('#s-client').value.trim(),
     xeroEmail: $('#s-xeroemail').value.trim(),
+    payMethods: payMethods().map((m) => { const i = document.querySelector(`#s-paymethods input[data-pay="${m.key}"]`); return { key: m.key, label: (i && i.value.trim()) || m.label }; }),
     ocr: $('#s-ocr').checked,
     showOcrText: $('#s-ocrtext').checked,
     allowance: {
@@ -867,6 +934,7 @@ function bind() {
   ['#e-status', '#e-client', '#e-from', '#e-to'].forEach((sel) => $(sel).addEventListener('change', renderExport));
   window.addEventListener('beforeunload', (e) => { if (editIsDirty()) { e.preventDefault(); e.returnValue = ''; } });
 
+  $('#x-weekly').addEventListener('click', exportWeekly);
   $('#x-bills').addEventListener('click', exportBills);
   $('#x-images').addEventListener('click', exportImagesZip);
   $('#x-share').addEventListener('click', shareToXero);
@@ -891,6 +959,9 @@ async function init() {
     await db.putSettings(state.settings);
   }
   state.receipts = await db.allReceipts();
+  for (const r of state.receipts) {
+    if (r.paidWith === 'company') { r.paidWith = 'westpac'; await db.putReceipt(r); }
+  }
   fillCategorySelect();
   bind();
   showView('capture');

@@ -64,7 +64,7 @@
 
       <div class="cards">
         <div class="card stat">
-          <div class="stat-label">Not yet in Xero</div>
+          <div class="stat-label">Not yet exported</div>
           <div class="stat-value" id="stat-xero">0</div>
         </div>
         <div class="card stat">
@@ -121,11 +121,9 @@
         </label>
         <label class="check"><input id="f-notax" type="checkbox" /> No GST on this receipt</label>
         <label>Paid with
-          <select id="f-paid">
-            <option value="personal">Personal card / cash (reimburse me)</option>
-            <option value="company">Company card</option>
-          </select>
+          <select id="f-paid"></select>
         </label>
+        <label class="check"><input id="f-taxinv" type="checkbox" /> Tax invoice (shows the supplier's ABN and “Tax Invoice”)</label>
         <label class="check" id="exempt-field"><input id="f-exempt" type="checkbox" /> Not part of my daily allowance (e.g. airport taxi)</label>
         <label class="check"><input id="f-billable" type="checkbox" /> Bill this to a client</label>
         <label id="client-field">Client
@@ -150,7 +148,7 @@
       <div class="filters">
         <select id="l-status">
           <option value="">All receipts</option>
-          <option value="notXero">Not yet in Xero</option>
+          <option value="notXero">Not yet exported</option>
           <option value="notClaimed">Billable, not yet claimed</option>
           <option value="billable">Billable</option>
           <option value="personal">Paid personally</option>
@@ -166,9 +164,9 @@
     <section id="view-export" class="view hidden">
       <div class="filters">
         <select id="e-status">
-          <option value="notXero">Not yet in Xero</option>
-          <option value="notClaimed">Billable, not yet claimed</option>
+          <option value="notXero">Not yet exported</option>
           <option value="">All receipts</option>
+          <option value="notClaimed">Billable, not yet claimed</option>
           <option value="billable">Billable</option>
           <option value="personal">Paid personally</option>
         </select>
@@ -188,25 +186,29 @@
         </div>
       </div>
 
-      <h2>Into Xero</h2>
+      <h2>Weekly export for bookkeeping</h2>
       <div class="export-group">
-        <button class="btn" id="x-bills" type="button">Bills CSV<small>Xero › Business › Bills to pay › Import, choose “Tax Inclusive”</small></button>
-        <button class="btn" id="x-images" type="button">Receipt photos (ZIP)<small>Attach to bills, or keep as records</small></button>
-        <button class="btn" id="x-share" type="button">Send photos to Xero bills inbox<small>Opens the share sheet; Xero reads the receipts</small></button>
+        <button class="btn primary" id="x-weekly" type="button">Export folder with CSV + photos<small id="x-weekly-sub">receipts-app-export-YYYY-MM-DD, saved to the month folder in iCloud</small></button>
       </div>
+      <p class="muted small" id="export-last"></p>
+      <p class="muted small">On the phone: choose <b>Save to Files</b>, open <b>Rogers Advisory Pty Ltd › Expenses &amp; Receipts › this month</b>, save, then tap the zip once to unpack it. On a Mac in Chrome the app writes the folder directly.</p>
 
-      <h2>For invoicing clients</h2>
-      <div class="export-group">
-        <button class="btn" id="x-invoice" type="button">Sales invoice CSV<small>Xero › Business › Invoices › Import. One invoice per client</small></button>
-        <button class="btn" id="x-claim-pdf" type="button">Expense claim PDF with photos<small>Attach to your invoice or claim</small></button>
-        <button class="btn" id="x-claim-csv" type="button">Expense list (CSV)<small>Date, merchant, net, GST, total per line</small></button>
-      </div>
-
-      <h2>Mark manually</h2>
-      <div class="export-group">
-        <button class="btn subtle" id="x-mark-xero" type="button">Mark selected as “in Xero”</button>
-        <button class="btn subtle" id="x-mark-claim" type="button">Mark selected as “claimed”</button>
-      </div>
+      <details class="advanced" id="other-exports">
+        <summary><h2>Other exports</h2></summary>
+        <div class="export-group">
+          <button class="btn" id="x-share" type="button">Send photos to Xero bills inbox<small>Opens the share sheet; Xero reads the receipts</small></button>
+          <button class="btn" id="x-bills" type="button">Xero bills CSV<small>Business › Bills to pay › Import, choose “Tax Inclusive”</small></button>
+          <button class="btn" id="x-invoice" type="button">Xero sales invoice CSV<small>Business › Invoices › Import. One invoice per client</small></button>
+          <button class="btn" id="x-claim-pdf" type="button">Expense claim PDF with photos<small>Attach to your invoice or claim</small></button>
+          <button class="btn" id="x-claim-csv" type="button">Receipts list (CSV only)<small>Same columns as the weekly export, no photos</small></button>
+          <button class="btn" id="x-images" type="button">Receipt photos (ZIP)<small>Photos and CSV without the dated folder</small></button>
+        </div>
+        <h2>Mark manually</h2>
+        <div class="export-group">
+          <button class="btn subtle" id="x-mark-xero" type="button">Mark selected as exported</button>
+          <button class="btn subtle" id="x-mark-claim" type="button">Mark selected as claimed</button>
+        </div>
+      </details>
     </section>
 
     <!-- Settings -->
@@ -215,6 +217,8 @@
         <h2>You</h2>
         <label>Your name (shown on expense claims) <input id="s-name" type="text" /></label>
         <label>Default client <input id="s-client" type="text" /></label>
+        <div class="muted small" style="margin-top:12px">Payment methods (the names the bookkeeping expects)</div>
+        <div id="s-paymethods"></div>
         <label>Xero bills email address
           <input id="s-xeroemail" type="email" placeholder="yourorg-xxxx@xerofiles.com" />
           <small class="muted">In Xero: Business › Bills to pay › “Email bills to Xero” (or Files › Inbox).</small>

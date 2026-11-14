@@ -25,19 +25,30 @@ export const REGIONS = {
 
 // Default Xero chart-of-accounts codes (Xero's standard chart). All editable in Settings.
 export const CATEGORIES = [
-  { key: 'taxi', label: 'Taxi / rideshare', account: '493' },
-  { key: 'travel', label: 'Travel (train, flights, parking)', account: '493' },
   { key: 'meals', label: 'Meals & drinks', account: '420' },
+  { key: 'taxi', label: 'Taxi', account: '493' },
+  { key: 'parking', label: 'Parking', account: '493' },
+  { key: 'travel', label: 'Travel (train, flights)', account: '493' },
   { key: 'accommodation', label: 'Accommodation', account: '493' },
-  { key: 'services', label: 'Services & subscriptions', account: '429' },
   { key: 'supplies', label: 'Office supplies', account: '453' },
+  { key: 'services', label: 'Services & subscriptions', account: '429' },
   { key: 'other', label: 'Other', account: '429' },
 ];
 
-export const PAY_METHODS = {
-  personal: 'Personal card / cash (reimburse me)',
-  company: 'Company card',
-};
+// How a receipt was paid. The labels are what the bookkeeping expects in the export, so
+// they are stored in settings and only changed deliberately. 'personal' is special: it is
+// what gets reimbursed to you.
+export const DEFAULT_PAY_METHODS = [
+  { key: 'personal', label: 'Personal card / cash (reimburse me)' },
+  { key: 'westpac', label: 'Westpac business card' },
+  { key: 'cognatio', label: 'Cognatio card' },
+];
+
+export function payLabel(key, settings) {
+  const list = (settings && settings.payMethods) || DEFAULT_PAY_METHODS;
+  const m = list.find((x) => x.key === key);
+  return m ? m.label : key || '';
+}
 
 export function defaultSettings(region = 'AU') {
   const r = REGIONS[region] || REGIONS.AU;
@@ -62,6 +73,8 @@ export function defaultSettings(region = 'AU') {
     // 'merchant' = one bill per receipt payable to the merchant.
     billsMode: 'claim',
     billsLabel: 'Expenses',
+    payMethods: DEFAULT_PAY_METHODS.map((m) => ({ ...m })),
+    exports: [], // { folder, month, at, count }
     ocr: true,
     // Meals and incidentals: coffee, food, local taxis. Flights, airport transfers and hotels
     // belong in Travel / Accommodation, which do not count. A single receipt can also be
@@ -294,17 +307,33 @@ export function invoiceCsv(receipts, settings, opts) {
 // Plain spreadsheet for an expense claim or for pasting into any invoicing tool.
 export const CLAIM_HEADER = [
   'Date', 'Merchant', 'Category', 'Client', 'Paid with', 'Net', 'Tax', 'Total', 'Currency', 'Notes', 'Receipt image',
+  'Tax invoice',
 ];
 
 export function claimRows(receipts, settings) {
   return receipts.map((r) => {
     const tax = r.noTax ? 0 : Number(r.tax) || 0;
     return [
-      r.date, r.merchant || '', categoryLabel(r.category), r.client || '', PAY_METHODS[r.paidWith] || r.paidWith || '',
+      r.date, r.merchant || '', categoryLabel(r.category), r.client || '', payLabel(r.paidWith, settings),
       money((Number(r.total) || 0) - tax), money(tax), money(r.total), r.currency || settings.currency,
       r.notes || '', r.hasImage ? imageFileName(r) : '',
+      r.taxInvoice ? 'Y' : 'N',
     ];
   });
+}
+
+// Weekly export folder names: receipts-app-export-YYYY-MM-DD, never reused. A second export
+// on the same day gets -2, -3 and so on.
+export function monthFolder(dateIso) {
+  return dateIso.slice(0, 7);
+}
+export function exportFolderName(dateIso, existing = []) {
+  const base = `receipts-app-export-${dateIso}`;
+  let name = base;
+  let n = 1;
+  const taken = new Set(existing);
+  while (taken.has(name)) { n += 1; name = `${base}-${n}`; }
+  return name;
 }
 
 export function claimCsv(receipts, settings) {

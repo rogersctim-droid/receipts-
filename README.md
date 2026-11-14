@@ -15,7 +15,8 @@ no account, no server, no subscription.
 | --- | --- |
 | Capture | Tap **Take photo of receipt**. The app reads the total, GST, merchant, date and a category from the photo and fills them in for you to check. Anything it misses you type. |
 | Tag | Mark who paid (personal card = reimburse me) and which client it should be billed to. |
-| Into Xero | **Export › Download bills CSV** then Xero › Business › Bills to pay › Import. Or **Share photos to Xero bills inbox** to email the photos to Xero, which reads them itself. |
+| Weekly export | **Export › Export folder with CSV + photos** produces `receipts-app-export-YYYY-MM-DD/` with `receipts.csv` and one image per receipt, for the bookkeeping's iCloud folder `Rogers Advisory Pty Ltd/Expenses & Receipts/YYYY-MM/`. On the phone it goes through Save to Files; in desktop Chrome it is written straight into the folder you pick. Folder names are never reused. |
+| Into Xero | Under **Other exports**: a bills CSV for Xero › Business › Bills to pay › Import, or **Send photos to Xero bills inbox**. The bookkeeping run normally creates the Xero bills from the weekly export instead, so use these only if you are doing it by hand. |
 | Invoice a client | **Export › Download sales invoice CSV** then Xero › Business › Invoices › Import. One draft invoice per client with a line per receipt. |
 | Attach evidence | **Expense claim PDF with photos** gives a one-page summary plus every receipt image, ready to attach to the invoice or an expense claim. |
 | Daily allowance | The Capture screen shows how much of your daily spend (default $165) is left, with a bar that turns amber at 75% and red when over. The receipt form shows what a receipt would leave. Amount and which categories count are in Settings. |
@@ -34,6 +35,15 @@ In Xero go to Business › Bills to pay and click the **Email bills to Xero** li
 (or Files › Inbox). Copy the address ending in `@xerofiles.com` into Settings. When you use
 **Share photos to Xero bills inbox** the app copies that address to your clipboard and opens the
 share sheet. Choose Mail and paste the address.
+
+## Weekly export columns
+
+`receipts.csv` has: Date (YYYY-MM-DD, receipt date), Merchant, Category, Client, Paid with
+(one of the payment method names from Settings: "Personal card / cash (reimburse me)",
+"Westpac business card", "Cognatio card"), Net, Tax, Total (GST inclusive), Currency, Notes,
+Receipt image (file name in the same folder, `YYYY-MM-DD_merchant_total.jpg`) and Tax invoice
+(Y when the receipt shows the supplier's ABN and the words "tax invoice", otherwise N; the
+reader sets it automatically when it can see both).
 
 ## Xero import notes
 

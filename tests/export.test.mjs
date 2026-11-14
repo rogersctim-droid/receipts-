@@ -3,12 +3,12 @@ import assert from 'node:assert/strict';
 import {
   defaultSettings, taxFromGross, formatXeroDate, addDays, csvEscape, toCsv, billsCsv, billsRows, BILLS_HEADER,
   invoiceRows, invoiceCsv, INVOICE_HEADER, claimRows, summarize, filterReceipts, imageFileName, billReference,
-  allowanceStatus, dateRangeLabel,
+  allowanceStatus, dateRangeLabel, exportFolderName, monthFolder, payLabel, CLAIM_HEADER,
 } from '../src/export.js';
 
 const settings = defaultSettings('UK');
 const taxi = { id: 'abc123def456', date: '2026-11-03', merchant: 'Uber', category: 'taxi', total: 24, tax: 4, paidWith: 'personal', billable: true, client: 'Acme Ltd', notes: 'Airport', hasImage: true, currency: 'GBP' };
-const lunch = { id: 'zzz999', date: '2026-11-01', merchant: 'Pret, "The Strand"', category: 'meals', total: 12.5, tax: 0, noTax: true, paidWith: 'company', billable: false, client: '', notes: '', hasImage: false };
+const lunch = { id: 'zzz999', date: '2026-11-01', merchant: 'Pret, "The Strand"', category: 'meals', total: 12.5, tax: 0, noTax: true, paidWith: 'westpac', billable: false, client: '', notes: '', hasImage: false };
 
 test('tax from gross at 20%', () => {
   assert.equal(taxFromGross(120, 20), 20);
@@ -91,7 +91,7 @@ test('sales invoice CSV groups by client', () => {
   assert.equal(acme['*AccountCode'], '200');
   assert.equal(acme['*TaxType'], '20% (VAT on Income)');
   assert.equal(acme.Currency, '');
-  assert.match(acme['*Description'], /^03\/11\/2026 - Taxi \/ rideshare - Uber - Airport$/);
+  assert.match(acme['*Description'], /^03\/11\/2026 - Taxi - Uber - Airport$/);
   const numbers = new Set(rows.map((r) => r[10]));
   assert.equal(numbers.size, 3, 'one invoice number per client');
   assert.ok(invoiceCsv([taxi], settings).startsWith(INVOICE_HEADER.join(',')));
@@ -112,13 +112,27 @@ test('recharge net plus tax bills the receipt net amount', () => {
   assert.equal(noTaxRow[INVOICE_HEADER.indexOf('*UnitAmount')], '12.50', 'no-tax receipt is recharged in full');
 });
 
-test('claim rows split net and tax', () => {
-  const [row] = claimRows([taxi], settings);
+test('claim rows split net and tax, name the card, flag tax invoices', () => {
+  const [row] = claimRows([{ ...taxi, taxInvoice: true }], settings);
+  assert.equal(row[4], 'Personal card / cash (reimburse me)');
   assert.equal(row[5], '20.00');
   assert.equal(row[6], '4.00');
   assert.equal(row[7], '24.00');
   assert.equal(row[10], '2026-11-03_uber_24.00.jpg');
+  assert.equal(row[11], 'Y');
+  assert.equal(CLAIM_HEADER[11], 'Tax invoice');
+  const [lunchRow] = claimRows([lunch], settings);
+  assert.equal(lunchRow[4], 'Westpac business card');
+  assert.equal(lunchRow[11], 'N');
   assert.equal(imageFileName(taxi), '2026-11-03_uber_24.00.jpg');
+  assert.equal(payLabel('cognatio', settings), 'Cognatio card');
+});
+
+test('weekly export folder names never repeat', () => {
+  assert.equal(monthFolder('2026-11-14'), '2026-11');
+  assert.equal(exportFolderName('2026-11-14'), 'receipts-app-export-2026-11-14');
+  assert.equal(exportFolderName('2026-11-14', ['receipts-app-export-2026-11-14']), 'receipts-app-export-2026-11-14-2');
+  assert.equal(exportFolderName('2026-11-14', ['receipts-app-export-2026-11-14', 'receipts-app-export-2026-11-14-2']), 'receipts-app-export-2026-11-14-3');
 });
 
 test('summaries and filters', () => {

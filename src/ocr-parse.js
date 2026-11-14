@@ -19,10 +19,11 @@ const CATEGORY_KEYWORDS = {
   taxi: [[/\buber\b|\bdidi\b|\bola\b|\btaxi\b|\bcabs?\b|rideshare|trip\s*fare|\bfare\b|13\s*cabs|silver\s*top/i, 3]],
   travel: [
     [/qantas|jetstar|virgin\s*australia|\bflight|boarding|\bairline|\brex\b/i, 3],
-    [/parking|\btoll|linkt|\bopal\b|\bmyki\b|translink|\btrain\b|\bmetro\b|\bbus\b|\bferry\b|\btram\b/i, 3],
+    [/\btoll|linkt|\bopal\b|\bmyki\b|translink|\btrain\b|\bmetro\b|\bbus\b|\bferry\b|\btram\b/i, 3],
     [/\bfuel\b|petrol|unleaded|diesel|\bampol\b|\bcaltex\b|\bbp\b|\bshell\b|7-?eleven/i, 2],
     [/car\s*hire|car\s*rental|\bhertz\b|\bavis\b|\bthrifty\b|europcar|\bbudget\b/i, 3],
   ],
+  parking: [[/parking|car\s*park|\bmeter\b|\bbay\s*\d|wilson|secure\s*park|\bentry\s*time|\bexit\s*time/i, 3]],
   accommodation: [
     [/accommodation|\bnights?\b|check-?\s*in|check-?\s*out|room\s*(rate|charge|no|number)|\bsuite\b|airbnb|\bibis\b|mercure|novotel|hilton|marriott|\bmotel\b|\bresort\b/i, 3],
     [/\bhotel\b/i, 1],
@@ -196,6 +197,12 @@ export function guessCategory(lines) {
   return best && best[1] >= 3 ? best[0] : null;
 }
 
+// A GST credit over $82.50 needs a tax invoice: the supplier's ABN and the words "tax invoice".
+export function isTaxInvoice(lines) {
+  const text = lines.join('\n');
+  return /\babn\b|a\.b\.n\./i.test(text) && /tax\s*invoice/i.test(text);
+}
+
 export function parseReceiptText(text, opts = {}) {
   const lines = String(text || '').split(/\r?\n/).map(normalizeLine).filter(Boolean);
   const totalInfo = findTotal(lines);
@@ -208,6 +215,7 @@ export function parseReceiptText(text, opts = {}) {
     tax,
     date: findDate(lines, opts),
     category: guessCategory(lines),
+    taxInvoice: isTaxInvoice(lines),
     lines,
   };
 }
