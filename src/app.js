@@ -1,13 +1,13 @@
 import { db } from './db.js';
 import {
-  REGIONS, CATEGORIES, DEFAULT_PAY_METHODS, defaultSettings, categoryLabel, money, taxFromGross, imageFileName,
+  REGIONS, CATEGORIES, DEFAULT_PAY_METHODS, defaultSettings, categoryLabel, money, taxFromGross, imageFileNames,
   billsCsv, invoiceCsv, claimCsv, summarize, filterReceipts, formatXeroDate, round2, allowanceStatus,
-  exportFolderName, monthFolder, payLabel,
+  exportFolderName, monthFolder, payLabel, weekStart, reminderIcs,
 } from './export.js';
 import { buildZip } from './zip.js';
 import { readReceipt, ocrSupported, preloadOcr } from './ocr.js';
 
-export const APP_VERSION = '1.7.0';
+export const APP_VERSION = '1.8.0';
 
 const $ = (sel) => document.querySelector(sel);
 const state = {
@@ -21,6 +21,7 @@ const state = {
   openSnapshot: null, // every field as it was when the form opened, for the unsaved-changes check
   ocrToken: 0,
   followup: null, // { kind: 'xero'|'claim', receipts, text } after an export
+  exportDatesTouched: false, // once the user edits From/To, stop defaulting them to this week
   previousView: 'capture',
   view: 'capture',
   thumbUrls: new Map(),
@@ -517,6 +518,14 @@ function recomputeTax() {
 }
 async function saveEdit(e) {
   e.preventDefault();
+  try {
+    await saveEditInner();
+  } catch (err) {
+    toast(`Could not save: ${err && err.message ? err.message : err}`, 6000);
+    console.error(err);
+  }
+}
+async function saveEditInner() {
   const existing = state.currentId ? state.receipts.find((x) => x.id === state.currentId) : null;
   const id = existing ? existing.id : uid();
   const billable = $('#f-billable').checked;
@@ -602,11 +611,15 @@ function exportSelection() {
 function renderExport() {
   fillClientSelect($('#e-client'));
   clearFollowup();
+  // Default to the current week (Monday to today) unless the user has set the dates.
+  if (!state.exportDatesTouched) { $('#e-from').value = weekStart(todayIso()); $('#e-to').value = todayIso(); }
+  // Unsent receipts older than the From date would be silently left out: say so.
+  const from = $('#e-from').value;
+  const older = from ? filterReceipts(state.receipts, { status: $('#e-status').value, client: $('#e-client').value, to: addDaysIso(from, -1) }) : [];
+  $('#export-older').classList.toggle('hidden', !older.length);
+  if (older.length) $('#export-older-text').textContent = `${older.length} unsent receipt${older.length === 1 ? '' : 's'} from before ${fmtDate(from)} (${fmtMoney(summarize(older).total)}) ${older.length === 1 ? 'is' : 'are'} outside the date range.`;
+  renderExportHistory();
   const log = state.settings.exports || [];
-  const last = log[log.length - 1];
-  $('#export-last').textContent = last
-    ? `Last ${last.how === 'email' ? 'send' : 'export'}: ${last.folder} (${last.count} receipt${last.count === 1 ? '' : 's'}, ${fmtDate(last.at.slice(0, 10))}). ${log.length} so far.`
-    : 'Nothing sent yet.';
   $('#x-weekly-sub').textContent = `${monthFolder(todayIso())} / ${exportFolderName(todayIso(), log.map((e) => e.folder))}`;
   $('#x-email-sub').textContent = state.settings.inboxEmail ? `To ${state.settings.inboxEmail} · batch ${exportFolderName(todayIso(), log.map((e) => e.folder))}` : 'Set the inbox address in Settings first';
   const rs = exportSelection();
@@ -619,12 +632,13 @@ function requireSelection() {
   return rs;
 }
 async function imageEntries(rs) {
+  const names = imageFileNames(rs);
   const out = [];
   for (const r of rs) {
-    if (!r.hasImage) continue;
+    if (!names.has(r.id)) continue;
     const img = await db.getImage(r.id);
     if (!img) continue;
-    out.push({ r, name: imageFileName(r), blob: img.full });
+    out.push({ r, name: names.get(r.id), blob: img.full });
   }
   return out;
 }
@@ -661,6 +675,25 @@ async function exportBills() {
   toast('In Xero choose “Tax Inclusive” when importing.', 5000);
   offerMark('xero', rs, `Bills CSV ${how}`);
 }
+function addDaysIso(iso, n) {
+  const d = new Date(`${iso}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10);
+}
+function renderExportHistory() {
+  const log = [...(state.settings.exports || [])].reverse();
+  $('#export-last').textContent = log.length ? '' : 'Nothing sent yet.';
+  $('#export-history').innerHTML = log.slice(0, 12).map((e) => `<li><span>${escapeHtml(e.folder)} · ${e.count} receipt${e.count === 1 ? '' : 's'}</span><span>${escapeHtml(fmtDate(e.at.slice(0, 10)))} · ${e.how === 'email' ? 'emailed' : 'folder'}</span></li>`).join('');
+}
+async function addReminder() {
+  const ics = reminderIcs({
+    title: 'Email receipts to the bookkeeping inbox',
+    byDay: 'TH', hour: 16,
+    description: 'Open the Receipts app, Export, Email receipts + CSV to the inbox.',
+    url: location.href.split('?')[0],
+  });
+  const how = await deliver(new Blob([ics], { type: 'text/calendar' }), 'receipts-reminder.ics', 'Weekly receipts reminder');
+  if (how !== 'cancelled') toast('Open the file in Calendar and tap Add. It repeats every Thursday at 4 pm.', 6000);
+}
+
 // Weekly send: every photo plus the CSV, attached to an email via the share sheet. The batch
 // name goes in the CSV file name and the message so the Friday run can tell batches apart.
 async function exportEmail() {
@@ -701,7 +734,7 @@ async function exportEmail() {
   }
   state.settings.exports = [...log, { folder: batch, month: monthFolder(today), at: new Date().toISOString(), count: rs.length, how: 'email' }].slice(-100);
   await db.putSettings(state.settings);
-  $('#export-last').textContent = `Last send: ${batch} (${rs.length} receipts, today).`;
+  renderExportHistory();
   offerMark('xero', rs, `Emailed ${batch}`);
 }
 
@@ -745,9 +778,9 @@ async function exportWeekly() {
     if (result === 'cancelled') return;
     how = `${folder}.zip ${result}`;
   }
-  state.settings.exports = [...log, { folder, month, at: new Date().toISOString(), count: rs.length }].slice(-100);
+  state.settings.exports = [...log, { folder, month, at: new Date().toISOString(), count: rs.length, how: 'folder' }].slice(-100);
   await db.putSettings(state.settings);
-  $('#export-last').textContent = `Last export: ${folder} (${rs.length} receipts, today).`;
+  renderExportHistory();
   offerMark('xero', rs, how);
 }
 
@@ -1026,7 +1059,10 @@ function bind() {
   $('#f-billable').addEventListener('change', (e) => { state.billableTouched = true; $('#client-field').classList.toggle('hidden', !e.target.checked); });
 
   ['#l-status', '#l-client', '#l-month'].forEach((sel) => $(sel).addEventListener('change', renderList));
-  ['#e-status', '#e-client', '#e-from', '#e-to'].forEach((sel) => $(sel).addEventListener('change', renderExport));
+  ['#e-status', '#e-client'].forEach((sel) => $(sel).addEventListener('change', renderExport));
+  ['#e-from', '#e-to'].forEach((sel) => $(sel).addEventListener('change', () => { state.exportDatesTouched = true; renderExport(); }));
+  $('#btn-include-older').addEventListener('click', () => { state.exportDatesTouched = true; $('#e-from').value = ''; renderExport(); });
+  $('#x-reminder').addEventListener('click', addReminder);
   window.addEventListener('beforeunload', (e) => { if (editIsDirty()) { e.preventDefault(); e.returnValue = ''; } });
 
   $('#x-email').addEventListener('click', exportEmail);

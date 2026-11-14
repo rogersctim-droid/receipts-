@@ -197,3 +197,7 @@ input.suggested { border-color: var(--primary); box-shadow: 0 0 0 2px color-mix(
 .btn.primary small { color: color-mix(in srgb, var(--primary-ink) 80%, transparent); }
 #s-paymethods label { margin-top: 6px; }
 #s-paymethods input { padding: 9px 12px; min-height: 40px; font-size: 15px; }
+
+.history { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.history li { display: flex; justify-content: space-between; gap: 10px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; font-size: 14px; }
+.history li span:last-child { color: var(--muted); white-space: nowrap; }

@@ -143,6 +143,22 @@ export function imageFileName(r) {
   return `${r.date}_${slug(r.merchant)}_${money(r.total)}.jpg`;
 }
 
+// Unique image file names for one export. Two identical receipts on the same day (two coffees
+// at the same cafe) would otherwise share a name; the second becomes ..._5.50-2.jpg.
+export function imageFileNames(receipts) {
+  const names = new Map();
+  const used = new Set();
+  for (const r of receipts) {
+    if (!r.hasImage) continue;
+    const base = imageFileName(r);
+    let name = base; let n = 1;
+    while (used.has(name)) { n += 1; name = base.replace(/\.jpg$/, `-${n}.jpg`); }
+    used.add(name);
+    names.set(r.id, name);
+  }
+  return names;
+}
+
 export function csvEscape(v) {
   if (v === null || v === undefined) return '';
   const s = String(v);
@@ -314,17 +330,24 @@ export function invoiceCsv(receipts, settings, opts) {
 // Plain spreadsheet for an expense claim or for pasting into any invoicing tool.
 export const CLAIM_HEADER = [
   'Date', 'Merchant', 'Category', 'Client', 'Paid with', 'Net', 'Tax', 'Total', 'Currency', 'Notes', 'Receipt image',
-  'Tax invoice',
+  'Tax invoice', 'Airport transfer', 'Daily allowance',
 ];
 
-export function claimRows(receipts, settings) {
+// 'Daily allowance' is Y when the receipt counts towards the per-day cap (category in the
+// allowance set and not exempted), so the bookkeeping does not have to re-derive the rule.
+export function claimRows(receipts, settings, names = imageFileNames(receipts)) {
+  const a = settings.allowance || {};
+  const cats = new Set(a.categories && a.categories.length ? a.categories : CATEGORIES.map((c) => c.key));
   return receipts.map((r) => {
     const tax = r.noTax ? 0 : Number(r.tax) || 0;
+    const counted = cats.has(r.category || 'other') && !r.allowanceExempt && !r.airport;
     return [
       r.date, r.merchant || '', categoryLabel(r.category), r.client || '', payLabel(r.paidWith, settings),
       money((Number(r.total) || 0) - tax), money(tax), money(r.total), r.currency || settings.currency,
-      r.notes || '', r.hasImage ? imageFileName(r) : '',
+      r.notes || '', names.get(r.id) || '',
       r.taxInvoice ? 'Y' : 'N',
+      r.airport ? 'Y' : 'N',
+      counted ? 'Y' : 'N',
     ];
   });
 }
@@ -371,4 +394,43 @@ export function filterReceipts(receipts, f = {}) {
     if (f.status === 'personal' && r.paidWith !== 'personal') return false;
     return true;
   });
+}
+
+// Monday of the week containing dateIso (ISO weeks, Monday first).
+export function weekStart(dateIso) {
+  const d = new Date(`${dateIso}T00:00:00Z`);
+  const day = (d.getUTCDay() + 6) % 7; // Mon=0 .. Sun=6
+  d.setUTCDate(d.getUTCDate() - day);
+  return d.toISOString().slice(0, 10);
+}
+
+// A repeating calendar event with an alert, as an .ics file. byDay is 'TH' etc.; hour is local
+// time (floating, no time zone, so it follows the phone). The first occurrence is the next
+// such weekday on or after `now`.
+export function reminderIcs({ title, byDay = 'TH', hour = 16, minute = 0, url = '', description = '', now = new Date() } = {}) {
+  const days = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
+  const target = days.indexOf(byDay);
+  const first = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  let ahead = (target - first.getDay() + 7) % 7;
+  if (ahead === 0 && (now.getHours() > hour || (now.getHours() === hour && now.getMinutes() >= minute))) ahead = 7;
+  first.setDate(first.getDate() + ahead);
+  const pad = (n) => String(n).padStart(2, '0');
+  const stamp = (d) => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(hour)}${pad(minute)}00`;
+  const end = new Date(first); end.setMinutes(end.getMinutes() + 15);
+  const esc = (t) => String(t).replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/,/g, '\\,').replace(/;/g, '\\;');
+  const uid = `receipts-reminder-${byDay}-${hour}${pad(minute)}@receipts-app`;
+  return [
+    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Receipts app//EN', 'CALSCALE:GREGORIAN',
+    'BEGIN:VEVENT',
+    `UID:${uid}`,
+    `DTSTAMP:${stamp(new Date(now.getFullYear(), now.getMonth(), now.getDate()))}Z`.replace(/T\d{6}Z$/, `T${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}00Z`),
+    `DTSTART:${stamp(first)}`,
+    `DTEND:${stamp(end).slice(0, 9)}${pad(end.getHours())}${pad(end.getMinutes())}00`,
+    `RRULE:FREQ=WEEKLY;BYDAY=${byDay}`,
+    `SUMMARY:${esc(title)}`,
+    description ? `DESCRIPTION:${esc(description)}` : null,
+    url ? `URL:${url}` : null,
+    'BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${esc(title)}`, 'TRIGGER:-PT0M', 'END:VALARM',
+    'END:VEVENT', 'END:VCALENDAR',
+  ].filter(Boolean).join('\r\n') + '\r\n';
 }

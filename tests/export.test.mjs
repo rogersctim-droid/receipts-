@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {
   defaultSettings, taxFromGross, formatXeroDate, addDays, csvEscape, toCsv, billsCsv, billsRows, BILLS_HEADER,
   invoiceRows, invoiceCsv, INVOICE_HEADER, claimRows, summarize, filterReceipts, imageFileName, billReference,
-  allowanceStatus, dateRangeLabel, exportFolderName, monthFolder, payLabel, CLAIM_HEADER,
+  allowanceStatus, dateRangeLabel, exportFolderName, monthFolder, payLabel, CLAIM_HEADER, imageFileNames,
+  weekStart, reminderIcs,
 } from '../src/export.js';
 
 const settings = defaultSettings('UK');
@@ -134,6 +135,23 @@ test('claim rows split net and tax, name the card, flag tax invoices', () => {
   assert.equal(lunchRow[11], 'N');
   assert.equal(imageFileName(taxi), '2026-11-03_uber_24.00.jpg');
   assert.equal(payLabel('cognatio', settings), 'Cognatio card');
+  assert.equal(row[12], 'N', 'not an airport transfer');
+  assert.equal(row[13], 'Y', 'taxi counts towards the daily allowance by default');
+  const [airportRow] = claimRows([{ ...taxi, airport: true }], settings);
+  assert.equal(airportRow[12], 'Y');
+  assert.equal(airportRow[13], 'N');
+  const [hotelRow] = claimRows([{ ...taxi, category: 'accommodation' }], settings);
+  assert.equal(hotelRow[13], 'N', 'accommodation is outside the allowance');
+});
+
+test('identical receipts on one day get distinct image names, and the CSV matches', () => {
+  const a = { id: 'a', date: '2026-11-11', merchant: 'Sergy Boy', total: 6.5, hasImage: true, category: 'meals' };
+  const b = { id: 'b', date: '2026-11-11', merchant: 'Sergy Boy', total: 6.5, hasImage: true, category: 'meals' };
+  const names = imageFileNames([a, b]);
+  assert.equal(names.get('a'), '2026-11-11_sergy-boy_6.50.jpg');
+  assert.equal(names.get('b'), '2026-11-11_sergy-boy_6.50-2.jpg');
+  const rows = claimRows([a, b], settings);
+  assert.equal(rows[1][10], '2026-11-11_sergy-boy_6.50-2.jpg');
 });
 
 test('weekly export folder names never repeat', () => {
@@ -176,4 +194,21 @@ test('daily allowance countdown', () => {
   const exempt = allowanceStatus([...today, { id: 'e', date: '2026-11-11', category: 'taxi', total: 90, allowanceExempt: true }], s, '2026-11-11');
   assert.equal(exempt.spent, 63.1, 'airport taxi marked exempt is ignored');
   assert.deepEqual(defaultSettings().allowance.categories, ['meals', 'taxi', 'other']);
+});
+
+test('week starts on Monday', () => {
+  assert.equal(weekStart('2026-11-14'), '2026-11-09'); // Saturday -> Monday
+  assert.equal(weekStart('2026-11-09'), '2026-11-09'); // Monday
+  assert.equal(weekStart('2026-11-15'), '2026-11-09'); // Sunday
+});
+
+test('calendar reminder repeats weekly with an alert', () => {
+  const ics = reminderIcs({ title: 'Email receipts, inbox', byDay: 'TH', hour: 16, url: 'https://example.test/', now: new Date(2026, 10, 14, 10, 0) });
+  assert.ok(ics.startsWith('BEGIN:VCALENDAR\r\n'));
+  assert.ok(ics.includes('DTSTART:20261119T160000'), 'next Thursday after Sat 14 Nov');
+  assert.ok(ics.includes('RRULE:FREQ=WEEKLY;BYDAY=TH'));
+  assert.ok(ics.includes('SUMMARY:Email receipts\\, inbox'));
+  assert.ok(ics.includes('TRIGGER:-PT0M'));
+  const sameDay = reminderIcs({ title: 't', byDay: 'SA', hour: 16, now: new Date(2026, 10, 14, 17, 0) });
+  assert.ok(sameDay.includes('DTSTART:20261121T160000'), 'past the time today -> next week');
 });
