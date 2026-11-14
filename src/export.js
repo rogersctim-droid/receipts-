@@ -74,7 +74,10 @@ export function defaultSettings(region = 'AU') {
     billsMode: 'claim',
     billsLabel: 'Expenses',
     payMethods: DEFAULT_PAY_METHODS.map((m) => ({ ...m })),
-    exports: [], // { folder, month, at, count }
+    defaultPaidWith: 'westpac', // new receipts are company-card unless changed
+    defaultBillable: true, // and billable to the default client unless changed
+    inboxEmail: '', // the bookkeeping inbox that is read every Friday
+    exports: [], // { folder, month, at, count, how }
     ocr: true,
     // Meals and incidentals: coffee, food, local taxis. Flights, airport transfers and hotels
     // belong in Travel / Accommodation, which do not count. A single receipt can also be

@@ -7,7 +7,7 @@ import {
 import { buildZip } from './zip.js';
 import { readReceipt, ocrSupported, preloadOcr } from './ocr.js';
 
-export const APP_VERSION = '1.5.0';
+export const APP_VERSION = '1.6.0';
 
 const $ = (sel) => document.querySelector(sel);
 const state = {
@@ -191,8 +191,24 @@ function renderTotalHint() {
     : `Leaves ${fmtMoney(st.left)} of today's ${fmtMoney(st.amount)} allowance`;
 }
 
+// Receipts waiting to go to the inbox, surfaced from Thursday onwards or when the oldest is a week old.
+function renderSendBanner() {
+  const waiting = filterReceipts(state.receipts, { status: 'notXero' });
+  const banner = $('#send-banner');
+  if (!waiting.length) { banner.classList.add('hidden'); return; }
+  const day = new Date().getDay(); // 0 Sun .. 6 Sat
+  const oldest = waiting.map((r) => r.date).sort()[0];
+  const ageDays = (Date.now() - new Date(`${oldest}T00:00:00`).getTime()) / 86400000;
+  const due = day === 4 || day === 5 || day === 6 || ageDays >= 6;
+  banner.classList.toggle('hidden', !due);
+  if (!due) return;
+  const sum = summarize(waiting);
+  $('#send-banner-text').textContent = `${waiting.length} receipt${waiting.length === 1 ? '' : 's'} (${fmtMoney(sum.total)}) to send to the bookkeeping inbox before 7 am Friday.`;
+}
+
 async function renderHome() {
   renderAllowance();
+  renderSendBanner();
   const notXero = filterReceipts(state.receipts, { status: 'notXero' });
   const notClaimed = filterReceipts(state.receipts, { status: 'notClaimed' });
   $('#stat-xero').textContent = `${notXero.length} · ${fmtMoney(summarize(notXero).total)}`;
@@ -356,10 +372,11 @@ async function openEdit(id, pending) {
   $('#f-tax').value = r ? money(r.tax) : '';
   $('#f-notax').checked = r ? !!r.noTax : false;
   fillPaySelect();
-  $('#f-paid').value = r && payMethods().some((m) => m.key === r.paidWith) ? r.paidWith : 'personal';
+  const defaultPaid = payMethods().some((m) => m.key === s.defaultPaidWith) ? s.defaultPaidWith : 'personal';
+  $('#f-paid').value = r && payMethods().some((m) => m.key === r.paidWith) ? r.paidWith : defaultPaid;
   $('#f-taxinv').checked = r ? !!r.taxInvoice : false;
   $('#f-exempt').checked = r ? !!r.allowanceExempt : false;
-  $('#f-billable').checked = r ? !!r.billable : !!s.defaultClient;
+  $('#f-billable').checked = r ? !!r.billable : s.defaultBillable !== false;
   $('#f-client').value = r ? r.client || '' : s.defaultClient || '';
   $('#f-notes').value = r ? r.notes || '' : '';
   $('#client-field').classList.toggle('hidden', !$('#f-billable').checked);
@@ -572,9 +589,10 @@ function renderExport() {
   const log = state.settings.exports || [];
   const last = log[log.length - 1];
   $('#export-last').textContent = last
-    ? `Last export: ${last.folder} (${last.count} receipt${last.count === 1 ? '' : 's'}, ${fmtDate(last.at.slice(0, 10))}). ${log.length} export${log.length === 1 ? '' : 's'} so far.`
-    : 'No exports yet.';
+    ? `Last ${last.how === 'email' ? 'send' : 'export'}: ${last.folder} (${last.count} receipt${last.count === 1 ? '' : 's'}, ${fmtDate(last.at.slice(0, 10))}). ${log.length} so far.`
+    : 'Nothing sent yet.';
   $('#x-weekly-sub').textContent = `${monthFolder(todayIso())} / ${exportFolderName(todayIso(), log.map((e) => e.folder))}`;
+  $('#x-email-sub').textContent = state.settings.inboxEmail ? `To ${state.settings.inboxEmail} · batch ${exportFolderName(todayIso(), log.map((e) => e.folder))}` : 'Set the inbox address in Settings first';
   const rs = exportSelection();
   $('#export-summary').innerHTML = summaryHtml(rs);
   document.querySelectorAll('#view-export .btn').forEach((b) => { b.disabled = rs.length === 0; });
@@ -627,6 +645,50 @@ async function exportBills() {
   toast('In Xero choose “Tax Inclusive” when importing.', 5000);
   offerMark('xero', rs, `Bills CSV ${how}`);
 }
+// Weekly send: every photo plus the CSV, attached to an email via the share sheet. The batch
+// name goes in the CSV file name and the message so the Friday run can tell batches apart.
+async function exportEmail() {
+  const rs = requireSelection(); if (!rs.length) return;
+  const email = (state.settings.inboxEmail || '').trim();
+  if (!email) { toast('Add the bookkeeping inbox email in Settings first.', 4500); showView('settings'); return; }
+  const today = todayIso();
+  const log = state.settings.exports || [];
+  const batch = exportFolderName(today, log.map((e) => e.folder));
+  const entries = await imageEntries(rs);
+  const files = [new File([csvBlob(claimCsv(rs, state.settings))], `${batch}.csv`, { type: 'text/csv' }),
+    ...entries.map((e) => new File([e.blob], e.name, { type: 'image/jpeg' }))];
+  const bytes = files.reduce((n, f) => n + f.size, 0);
+  if (bytes > 20 * 1024 * 1024) {
+    toast(`That is ${(bytes / 1048576).toFixed(0)} MB of photos, too big for one email. Narrow the date range and send in two batches.`, 6000);
+    return;
+  }
+  const sum = summarize(rs);
+  const missing = rs.length - entries.length;
+  const text = [
+    `Receipts ${batch}`,
+    `${rs.length} receipt${rs.length === 1 ? '' : 's'}, total ${fmtMoney(sum.total)} (GST ${fmtMoney(sum.tax)}).`,
+    `Attached: ${batch}.csv and ${entries.length} photo${entries.length === 1 ? '' : 's'}${missing ? ` (${missing} receipt${missing === 1 ? ' has' : 's have'} no photo)` : ''}.`,
+    `Sent from the Receipts app.`,
+  ].join('\n');
+  if (!(navigator.canShare && navigator.canShare({ files }))) {
+    toast('This browser cannot share files to Mail. Use the folder export below and attach it yourself.', 6000);
+    return;
+  }
+  try { await navigator.clipboard.writeText(email); } catch { /* clipboard is a convenience only */ }
+  toast(`Choose Mail and paste the address into To: ${email}`, 6000);
+  try {
+    await navigator.share({ files, title: `Receipts ${batch}`, text });
+  } catch (err) {
+    if (err && err.name === 'AbortError') return;
+    toast(`Share failed: ${err.message}`, 5000);
+    return;
+  }
+  state.settings.exports = [...log, { folder: batch, month: monthFolder(today), at: new Date().toISOString(), count: rs.length, how: 'email' }].slice(-100);
+  await db.putSettings(state.settings);
+  $('#export-last').textContent = `Last send: ${batch} (${rs.length} receipts, today).`;
+  offerMark('xero', rs, `Emailed ${batch}`);
+}
+
 // Weekly export: a dated folder with receipts.csv and one photo per receipt, written into
 // the month folder of the bookkeeping's iCloud drive. Phones get a zip for the share sheet
 // (Save to Files, then tap to unpack); desktop Chrome writes the folder directly.
@@ -775,6 +837,10 @@ function renderSettings() {
   $('#s-tax-inc0').value = s.taxNames.incomeZero;
   $('#s-name').value = s.yourName || '';
   $('#s-client').value = s.defaultClient || '';
+  $('#s-inbox').value = s.inboxEmail || '';
+  $('#s-defaultpaid').innerHTML = payMethods().map((m) => `<option value="${escapeHtml(m.key)}">${escapeHtml(m.label)}</option>`).join('');
+  $('#s-defaultpaid').value = payMethods().some((m) => m.key === s.defaultPaidWith) ? s.defaultPaidWith : 'personal';
+  $('#s-defaultbillable').checked = s.defaultBillable !== false;
   $('#s-xeroemail').value = s.xeroEmail || '';
   $('#s-paymethods').innerHTML = payMethods().map((m) => `<label>${m.key === 'personal' ? 'Paid personally (reimbursed to you)' : 'Business card'} <input type="text" data-pay="${escapeHtml(m.key)}" value="${escapeHtml(m.label)}" /></label>`).join('');
   const al = s.allowance || defaultSettings().allowance;
@@ -822,6 +888,9 @@ async function saveSettings(e) {
     },
     yourName: $('#s-name').value.trim(),
     defaultClient: $('#s-client').value.trim(),
+    inboxEmail: $('#s-inbox').value.trim(),
+    defaultPaidWith: $('#s-defaultpaid').value,
+    defaultBillable: $('#s-defaultbillable').checked,
     xeroEmail: $('#s-xeroemail').value.trim(),
     payMethods: payMethods().map((m) => { const i = document.querySelector(`#s-paymethods input[data-pay="${m.key}"]`); return { key: m.key, label: (i && i.value.trim()) || m.label }; }),
     ocr: $('#s-ocr').checked,
@@ -934,6 +1003,8 @@ function bind() {
   ['#e-status', '#e-client', '#e-from', '#e-to'].forEach((sel) => $(sel).addEventListener('change', renderExport));
   window.addEventListener('beforeunload', (e) => { if (editIsDirty()) { e.preventDefault(); e.returnValue = ''; } });
 
+  $('#x-email').addEventListener('click', exportEmail);
+  $('#btn-send-now').addEventListener('click', () => { showView('export'); exportEmail(); });
   $('#x-weekly').addEventListener('click', exportWeekly);
   $('#x-bills').addEventListener('click', exportBills);
   $('#x-images').addEventListener('click', exportImagesZip);

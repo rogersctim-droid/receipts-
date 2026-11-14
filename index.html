@@ -45,6 +45,13 @@
         <div class="bar"><div class="bar-fill" id="allowance-bar"></div></div>
       </div>
 
+      <div id="send-banner" class="followup hidden">
+        <div id="send-banner-text"></div>
+        <div class="followup-actions">
+          <button type="button" class="btn primary small" id="btn-send-now">Email them now</button>
+        </div>
+      </div>
+
       <div class="capture-actions">
         <label class="big-btn primary" for="file-camera">
           <svg class="ico"><use href="#i-camera"/></svg>
@@ -186,21 +193,22 @@
         </div>
       </div>
 
-      <h2>Weekly export for bookkeeping</h2>
+      <h2>Weekly send to the bookkeeping inbox</h2>
       <div class="export-group">
-        <button class="btn primary" id="x-weekly" type="button">Export folder with CSV + photos<small id="x-weekly-sub">receipts-app-export-YYYY-MM-DD, saved to the month folder in iCloud</small></button>
+        <button class="btn primary" id="x-email" type="button">Email receipts + CSV to the inbox<small id="x-email-sub"></small></button>
       </div>
       <p class="muted small" id="export-last"></p>
-      <p class="muted small">On the phone: choose <b>Save to Files</b>, open <b>Rogers Advisory Pty Ltd › Expenses &amp; Receipts › this month</b>, save, then tap the zip once to unpack it. On a Mac in Chrome the app writes the folder directly.</p>
+      <p class="muted small">Opens the share sheet with every photo and the CSV attached. Choose <b>Mail</b>; the inbox address is already on your clipboard, so paste it into To and send. The Friday run picks everything up from there.</p>
 
       <details class="advanced" id="other-exports">
-        <summary><h2>Other exports</h2></summary>
+        <summary><h2>Backups and other exports</h2></summary>
         <div class="export-group">
+          <button class="btn" id="x-weekly" type="button">Export folder with CSV + photos<small id="x-weekly-sub">For the iCloud month folder, if email is not available</small></button>
           <button class="btn" id="x-share" type="button">Send photos to Xero bills inbox<small>Opens the share sheet; Xero reads the receipts</small></button>
           <button class="btn" id="x-bills" type="button">Xero bills CSV<small>Business › Bills to pay › Import, choose “Tax Inclusive”</small></button>
           <button class="btn" id="x-invoice" type="button">Xero sales invoice CSV<small>Business › Invoices › Import. One invoice per client</small></button>
           <button class="btn" id="x-claim-pdf" type="button">Expense claim PDF with photos<small>Attach to your invoice or claim</small></button>
-          <button class="btn" id="x-claim-csv" type="button">Receipts list (CSV only)<small>Same columns as the weekly export, no photos</small></button>
+          <button class="btn" id="x-claim-csv" type="button">Receipts list (CSV only)<small>Same columns as the weekly CSV, no photos</small></button>
           <button class="btn" id="x-images" type="button">Receipt photos (ZIP)<small>Photos and CSV without the dated folder</small></button>
         </div>
         <h2>Mark manually</h2>
@@ -216,7 +224,15 @@
       <form id="settings-form" autocomplete="off">
         <h2>You</h2>
         <label>Your name (shown on expense claims) <input id="s-name" type="text" /></label>
-        <label>Default client <input id="s-client" type="text" /></label>
+        <label>Bookkeeping inbox email (read every Friday)
+          <input id="s-inbox" type="email" placeholder="you@yourcompany.com" />
+        </label>
+
+        <h2>New receipt defaults</h2>
+        <label>Paid with <select id="s-defaultpaid"></select></label>
+        <label class="check"><input id="s-defaultbillable" type="checkbox" /> Billable to the default client</label>
+        <label>Default client <input id="s-client" type="text" placeholder="e.g. Energy Australia" /></label>
+        <p class="muted small">Every new receipt starts with these; change individual receipts by exception.</p>
         <div class="muted small" style="margin-top:12px">Payment methods (the names the bookkeeping expects)</div>
         <div id="s-paymethods"></div>
         <label>Xero bills email address
