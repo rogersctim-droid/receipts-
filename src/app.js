@@ -7,7 +7,7 @@ import {
 import { buildZip } from './zip.js';
 import { readReceipt, ocrSupported, preloadOcr } from './ocr.js';
 
-export const APP_VERSION = '1.6.0';
+export const APP_VERSION = '1.6.1';
 
 const $ = (sel) => document.querySelector(sel);
 const state = {
@@ -358,6 +358,16 @@ function bindViewer() {
   $('#viewer-close').addEventListener('click', closeViewer);
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeViewer(); });
 }
+// Quick entry for an Uber ride: no paper receipt, merchant and category known, just the fare.
+async function openUber() {
+  await openEdit(null);
+  $('#f-merchant').value = 'Uber';
+  $('#f-category').value = 'taxi';
+  $('#f-notes').placeholder = 'e.g. Office to client, airport';
+  state.openSnapshot = formSnapshot();
+  renderTotalHint();
+}
+
 async function openEdit(id, pending) {
   state.currentId = id;
   state.pendingImage = pending || null;
@@ -971,6 +981,7 @@ function bind() {
   $('#file-gallery').addEventListener('change', (e) => { handleNewPhoto(e.target.files[0]); e.target.value = ''; });
   $('#file-replace').addEventListener('change', (e) => { handleReplacePhoto(e.target.files[0]); e.target.value = ''; });
   $('#btn-no-photo').addEventListener('click', () => openEdit(null));
+  $('#btn-uber').addEventListener('click', openUber);
 
   $('#edit-form').addEventListener('submit', saveEdit);
   $('#btn-delete').addEventListener('click', deleteCurrent);

@@ -26,7 +26,7 @@ export const REGIONS = {
 // Default Xero chart-of-accounts codes (Xero's standard chart). All editable in Settings.
 export const CATEGORIES = [
   { key: 'meals', label: 'Meals & drinks', account: '420' },
-  { key: 'taxi', label: 'Taxi', account: '493' },
+  { key: 'taxi', label: 'Uber', account: '493' },
   { key: 'parking', label: 'Parking', account: '493' },
   { key: 'travel', label: 'Travel (train, flights)', account: '493' },
   { key: 'accommodation', label: 'Accommodation', account: '493' },
@@ -165,7 +165,7 @@ function describe(r) {
   return parts.join(' - ');
 }
 
-const SHORT_NOUN = { meals: 'Meal', taxi: 'Taxi', travel: 'Travel', accommodation: 'Accommodation', services: 'Service', supplies: 'Supplies', other: 'Expense' };
+const SHORT_NOUN = { meals: 'Meal', taxi: 'Uber', parking: 'Parking', travel: 'Travel', accommodation: 'Accommodation', services: 'Service', supplies: 'Supplies', other: 'Expense' };
 const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 export function shortDate(isoDate, withYear = false) {
@@ -188,7 +188,10 @@ export function dateRangeLabel(receipts) {
 
 // "Meal, 9 Nov, Bowlito" (+ notes)
 export function lineDescription(r) {
-  const parts = [SHORT_NOUN[r.category] || 'Expense', shortDate(r.date), r.merchant || 'Unknown merchant'];
+  const noun = SHORT_NOUN[r.category] || 'Expense';
+  const merchant = r.merchant || 'Unknown merchant';
+  const parts = [noun, shortDate(r.date)];
+  if (merchant.trim().toLowerCase() !== noun.toLowerCase()) parts.push(merchant); // "Uber, 3 Nov" not "Uber, 3 Nov, Uber"
   if (r.notes) parts.push(r.notes);
   return parts.join(', ');
 }

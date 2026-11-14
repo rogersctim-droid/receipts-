@@ -40,7 +40,7 @@ test('bills CSV: expense-claim style, one bill payable to you', () => {
   assert.equal(row['*InvoiceDate'], '12/11/2026');
   assert.equal(row['*DueDate'], '12/11/2026');
   assert.equal(row.Total, '');
-  assert.equal(row.Description, 'Taxi, 3 Nov, Uber, Airport');
+  assert.equal(row.Description, 'Uber, 3 Nov, Airport');
   assert.equal(row['*Quantity'], '1');
   assert.equal(row['*UnitAmount'], '24.00');
   assert.equal(row['*AccountCode'], '493');
@@ -91,7 +91,7 @@ test('sales invoice CSV groups by client', () => {
   assert.equal(acme['*AccountCode'], '200');
   assert.equal(acme['*TaxType'], '20% (VAT on Income)');
   assert.equal(acme.Currency, '');
-  assert.match(acme['*Description'], /^03\/11\/2026 - Taxi - Uber - Airport$/);
+  assert.match(acme['*Description'], /^03\/11\/2026 - Uber - Uber - Airport$/);
   const numbers = new Set(rows.map((r) => r[10]));
   assert.equal(numbers.size, 3, 'one invoice number per client');
   assert.ok(invoiceCsv([taxi], settings).startsWith(INVOICE_HEADER.join(',')));

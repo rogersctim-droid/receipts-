@@ -63,10 +63,16 @@
           <span>Choose from photos</span>
         </label>
         <input id="file-gallery" type="file" accept="image/*" hidden />
-        <button id="btn-no-photo" class="big-btn subtle" type="button">
-          <svg class="ico"><use href="#i-plus"/></svg>
-          <span>Add receipt without a photo</span>
-        </button>
+        <div class="row">
+          <button id="btn-uber" class="big-btn subtle" type="button">
+            <svg class="ico"><use href="#i-plus"/></svg>
+            <span>Uber ride</span>
+          </button>
+          <button id="btn-no-photo" class="big-btn subtle" type="button">
+            <svg class="ico"><use href="#i-plus"/></svg>
+            <span>No photo</span>
+          </button>
+        </div>
       </div>
 
       <div class="cards">
@@ -131,7 +137,7 @@
           <select id="f-paid"></select>
         </label>
         <label class="check"><input id="f-taxinv" type="checkbox" /> Tax invoice (shows the supplier's ABN and “Tax Invoice”)</label>
-        <label class="check" id="exempt-field"><input id="f-exempt" type="checkbox" /> Not part of my daily allowance (e.g. airport taxi)</label>
+        <label class="check" id="exempt-field"><input id="f-exempt" type="checkbox" /> Not part of my daily allowance (e.g. airport Uber)</label>
         <label class="check"><input id="f-billable" type="checkbox" /> Bill this to a client</label>
         <label id="client-field">Client
           <input id="f-client" type="text" list="client-list" placeholder="Client or project name" />
